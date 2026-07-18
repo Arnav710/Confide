@@ -14,11 +14,25 @@ router = APIRouter(prefix="/api/consent", tags=["consent"])
 
 EXPLAIN_SYSTEM = "You explain medical documents to a frightened patient with no medical training. Warm, plain, short."
 
+# Common language codes -> names so Gemma gets an unambiguous target language.
+_LANG_NAMES = {
+    "en": "English", "es": "Spanish", "zh": "Chinese", "vi": "Vietnamese",
+    "ar": "Arabic", "fr": "French", "ru": "Russian", "ko": "Korean",
+    "hi": "Hindi", "pt": "Portuguese", "tl": "Tagalog", "de": "German",
+    "ja": "Japanese", "fa": "Farsi", "so": "Somali",
+}
+
+
+def _lang_name(code: str | None) -> str:
+    return _LANG_NAMES.get((code or "en").lower(), code or "English")
+
+
 EXPLAIN_PROMPT = """A patient was handed this consent form. Explain it as JSON:
 {{
   "explanation": "3-5 short plain-language sentences: what the procedure is, why, and the main risks. Reassuring but honest.",
   "suggested_questions": ["3-4 questions a patient in this situation would naturally want to ask"]
 }}
+Write the "explanation" and every "suggested_questions" entry in {lang} — the patient's own language. Keep the JSON keys in English.
 Form text:
 \"\"\"{ocr_text}\"\"\"
 """
@@ -30,7 +44,7 @@ ANSWER_PROMPT = """Consent form text:
 
 Patient's question: {question}
 
-Answer in 1-3 plain, calm sentences, grounded ONLY in the form text above."""
+Answer in 1-3 plain, calm sentences, grounded ONLY in the form text above. Write your answer in {lang} (the patient's own language)."""
 
 
 class TextForm(BaseModel):
@@ -45,7 +59,9 @@ class QuestionRequest(BaseModel):
 
 
 def _build(patient_id, staff_id, ocr_text):
-    data = ask_json(EXPLAIN_PROMPT.format(ocr_text=ocr_text), system=EXPLAIN_SYSTEM)
+    patient = repo.get_patient(patient_id)
+    lang = _lang_name((patient or {}).get("primary_language"))
+    data = ask_json(EXPLAIN_PROMPT.format(ocr_text=ocr_text, lang=lang), system=EXPLAIN_SYSTEM)
     return repo.create_document(
         patient_id=patient_id, staff_id=staff_id, kind="consent", ocr_text=ocr_text,
         explanation=data.get("explanation"), suggested_questions=data.get("suggested_questions", []),
@@ -85,7 +101,9 @@ def ask_question(doc_id: int, body: QuestionRequest):
     doc = repo.get_document(doc_id)
     if not doc:
         raise HTTPException(404, "Form not found")
-    answer = ask(ANSWER_PROMPT.format(ocr_text=doc["ocr_text"], question=body.question), system=ANSWER_SYSTEM)
+    patient = repo.get_patient(body.patient_id)
+    lang = _lang_name((patient or {}).get("primary_language"))
+    answer = ask(ANSWER_PROMPT.format(ocr_text=doc["ocr_text"], question=body.question, lang=lang), system=ANSWER_SYSTEM)
     repo.log_qa(body.patient_id, "consent", body.question, answer, context_id=doc_id, asked_by="patient")
     return {"question": body.question, "answer": answer}
 
