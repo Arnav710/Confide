@@ -1,177 +1,189 @@
-# Doctor Offline
-**Private care, on your device.**
-Doctor Offline is an on-device AI companion for the *entire* hospital stay — from admission to discharge. Almost every touchpoint in a stay involves a sensitive conversation or document that shouldn't be routed through the cloud: a scared patient with limited English, a consent form nobody reads, a physician dictating orders, a rushed nurse handoff, a discharge sheet full of instructions. Doctor Offline handles all of it locally, on a single device, with nothing leaving the building.
-It runs on **Gemma 4** and keeps its core intelligence entirely offline — no cloud inference, no third-party processors, no audio or images sent anywhere.
-`Gemma 4` · `On-device` · `Privacy-first` · `Offline-capable`
+# Confide
+
+**On-prem clinical AI, powered by Gemma 4. Nothing ever reaches the cloud.**
+
+![Gemma 4](https://img.shields.io/badge/Gemma%204-on--device-blue)
+![On-Prem](https://img.shields.io/badge/AI-100%25%20on--prem-success)
+![Offline](https://img.shields.io/badge/network-not%20required-important)
+![Backend](https://img.shields.io/badge/FastAPI-Python%203.11+-009688)
+![Frontend](https://img.shields.io/badge/React-Vite-61dafb)
+
+Confide is a hospital-grade clinical companion where the **entire intelligence stack — every word understood, every document read, every safety check — runs on Gemma 4, on the hospital's own hardware.** It *hears* each conversation, *remembers* it in one living patient record, and *watches over* the care, catching what tired people miss.
+
+The audio, the documents, and the model itself never leave the building. Pull the network cable and it keeps working.
 
 ---
-## The problem
-Hospitals leak sensitive information at the seams. Interpreter phone lines route private conversations through a third party. Consent is a signature on a form the patient didn't understand. Verbal handoffs drop details between shifts. Discharge instructions are read once and forgotten, and preventable readmissions get the hospital penalized.
-The common thread: these are all private, high-stakes exchanges, and the usual "add an AI feature" answer means shipping that data to the cloud. For clinical conversations, that's the one place it shouldn't go.
-Doctor Offline's answer is to move the intelligence to the bedside instead of moving the data to the cloud.
-## Why on-device
-On-device isn't a marketing checkbox here — it's load-bearing for the use case:
-- **It removes an entire risk surface.** No interception, no breach exposure, no third-party processor. The audio and images never leave the machine, so there's nothing in transit to compromise.
-- **It works with zero connectivity.** Rural clinics, ambulances, and disaster settings don't have reliable networks. Doctor Offline keeps working with the network switched off.
-- **It's verifiable.** Because every core operation runs on `localhost`, you can prove privacy trivially: disable the network and watch it keep working.
-We're careful *not* to claim "clinical AI legally can't use the cloud" — HIPAA-compliant cloud scribes exist. The honest claim is narrower and stronger: on-device eliminates the breach and connectivity problems entirely, for the most sensitive audio in medicine.
----
-## The patient journey
-Doctor Offline follows one patient through a stay. Each moment is a feature; each feature reuses the same underlying primitives.
-**Admission.** A patient arrives, often scared, sometimes with limited English. Doctor Offline runs real-time, two-way translation between patient and staff — no interpreter phone line, no audio leaving the building, no ten-minute wait for a callback.
-**Consent.** Before a procedure, the patient is handed a dense consent form. Doctor Offline photographs it, explains it in plain language, and logs the actual questions the patient asked — a real record they understood the procedure, not just a signature on a page. Patients routinely sign consent they don't understand; this creates evidence of genuine informed consent.
-**Rounds.** The physician dictates observations and orders. Doctor Offline turns the session into a structured note and, on the roadmap, extracts follow-up orders ("recheck labs in 4 hours," "increase fluids") into a local task queue cross-checked against the patient's known allergies and interactions.
-**Bedside.** For a disoriented or elderly inpatient, a lightweight reality-orientation runs at the bedside: what day it is, why they're here, what happens next. Hospital delirium from disorientation is a well-documented complication, especially post-surgery and in older patients.
-**Shift handoff.** Instead of a rushed verbal recap between nurses, Doctor Offline auto-generates a structured SBAR-style handoff from the day's notes, so nothing is lost between shifts.
-**Discharge.** The patient gets grounded Q&A on their own discharge papers ("what does it say about when I can shower?"), red-flag symptoms matched against what's actually listed as urgent, and follow-up reminders scheduled. This ties directly to readmission rates, which CMS penalizes hospitals for — a concrete, fundable reason a hospital would adopt it.
+
+## Why on-prem AI
+
+The obvious way to add AI to a hospital ("plug in a cloud scribe") ships the most sensitive audio and documents in medicine to a third-party endpoint. Confide takes the opposite bet: **move the intelligence to the bedside instead of moving the data to the cloud.**
+
+On-prem is load-bearing here, not a checkbox:
+
+- **It removes an entire risk surface.** No data in transit means nothing to intercept, no third-party processor, no breach exposure. The threat model shrinks to the machine in the room.
+- **It works with zero connectivity.** Rural clinics, ambulances, and disaster settings don't have reliable networks. Confide doesn't need one.
+- **It's verifiable, not promised.** Every core operation runs on `localhost`. A live `NETWORK: OFF` pill and a floating **Gemma console** (prompt → JSON → latency, updating in real time) let anyone *watch* every inference happen locally. The privacy claim is provable in one step: turn off Wi-Fi and keep using the app.
+- **It's honest.** HIPAA-compliant cloud scribes exist; we don't claim clinical AI legally *cannot* use the cloud. The narrower, stronger claim: on-prem eliminates the breach-and-connectivity problem entirely for the most sensitive audio in medicine — and Gemma 4 is good enough to make that trade-off free.
+
+## What Gemma 4 does here
+
+One local model, served by Ollama, carries the whole product:
+
+| Capability | How Confide uses it |
+|---|---|
+| **Structured extraction** | Reads messy transcripts and pulls out discrete, category-tagged facts (`warfarin` → medication, category *anticoagulant*; "not on blood thinners" → statement, polarity *denied*). Grammar-constrained JSON mode makes output syntactically valid every time, with retry fallback. |
+| **Multimodal vision** | The *same* model OCRs consent forms, prescriptions, and discharge sheets — no second cloud OCR dependency to leak documents to. |
+| **Grounded Q&A** | Consent and discharge questions are answered from the actual document text placed in Gemma's context — not from the model's recollection. |
+| **Human phrasing** | Explains procedures in plain language, phrases Guardian alerts calmly, speaks gently to a frightened patient. |
+| **Runs warm on one box** | Small enough for full local serving via Ollama (`ollama pull gemma4`), held warm in memory (`keep_alive`) between calls so the UI stays responsive on CPU. |
+
+And one thing it deliberately **never** does:
+
+> ### Gemma is the *language* layer. It is never the *decision* layer.
+
+Every clinical judgment — *does this drug conflict with that allergy? do these two drugs interact? is this recheck overdue?* — is a **deterministic lookup in curated, auditable code** ([core/curated.py](core/curated.py)), not something the model reasons about from memory. That separation is what makes the system auditable, repeatable, and safe to stand behind: identical inputs produce identical alerts, every alert traces to a specific rule and specific facts, and Gemma's known weakness (confidently wrong reasoning) is designed out of the architecture.
 
 ---
-## Features
-Every feature is built on the same three primitives, so the list is deep, not scattered. Features are grouped by build priority.
-### Core — build and demo live
-| Feature | Stage | What it does | Primitives |
-| --- | --- | --- | --- |
-| **Clinical Scribe** | Rounds | Turns a spoken session into a structured note (chief complaint, medications, follow-ups). The listening core everything else is built on. | Voice (STT) · Memory |
-| **Real-Time Translation** | Admission | Two-way, bedside translation between patient and staff, spoken aloud in both directions. | Voice (STT + TTS) |
-| **Consent Explainer** | Consent | Reads a consent form, explains it in plain language, and logs the patient's spoken questions and the answers given. | Vision (OCR) · Voice · Memory |
-| **Discharge Navigator** | Discharge | Grounded Q&A on the patient's discharge papers, red-flag symptom matching, and scheduled follow-up reminders. | Vision (OCR) · Memory |
-### Strong add — if time allows
-| Feature | Stage | What it does | Primitives |
-| --- | --- | --- | --- |
-| **Shift Handoff Generator** | Shift change | Produces an SBAR-style handoff summary from the day's notes. Reuses the note-generation pipeline, so it's low new build cost. | Memory (reuses Scribe pipeline) |
-| **Bedside Orientation** | Bedside | A gentle spoken reminder of day, location, reason for stay, and what's next — to counter hospital delirium. | Voice (TTS) · Memory |
-### Roadmap — document, don't build live
-| Feature | Stage | Why it's roadmap | Primitives |
-| --- | --- | --- | --- |
-| **Order Extraction** | Rounds | Real and valuable, but reliable structured parsing under noisy round audio is fiddly. Needs the allergy/interaction cross-check to be trustworthy. | Voice (STT) · Memory (allergy check) |
-| **Alarm-Fatigue Triage** | Monitoring | A genuinely important hospital problem, but safety-sensitive to demo half-built. | (roadmap) |
+
+## What it does
+
+Confide is one product with three capabilities, demonstrated across an entire hospital stay for a single seeded patient (María, 68, chest pain, penicillin-allergic, on warfarin):
+
+| | Capability | What it does |
+|---|---|---|
+| 🎧 | **Hear** | Turns a spoken round, a consent conversation, or a patient question into structured, understood text — and explains any document in plain language. |
+| 🧠 | **Remember** | Builds **one living knowledge graph** of the patient from every interaction — allergies, meds, symptoms, orders, statements — persisted across the whole stay. |
+| 🛡 | **Watch over** | **The Guardian** — an always-on layer that checks everything said and done against that graph and **speaks up on its own** when it sees a conflict. |
+
+### The Guardian — the part that speaks up on its own
+
+From a single dictation, the Guardian runs three deterministic checks against the graph:
+
+1. **Allergy / interaction.** Every newly ordered drug is cross-checked against active allergies *and* current meds, including cross-reactivity (penicillin ↔ cephalosporin). Order an NSAID for a patient on warfarin → **critical bleeding-risk alert**, instantly.
+2. **Contradiction.** A patient statement that denies something the record asserts. "I'm not on any blood thinners" → flagged against the warfarin on file from admission.
+3. **Forgotten order.** An ordered recheck whose window elapsed with nothing marked done. "Recheck troponin in 3 hours" that never got closed → a gentle "before you go…" flag.
+
+Alerts are persisted, flow into the shift handoff, and are **surfaced, never auto-acted-upon** — the clinician stays in the loop.
+
+### The guided visit
+
+A clinician is walked through the whole encounter — **Prepare → Consent → The meeting → Prescription → Handoff → Discharge** — and every stage feeds the same graph and the same Guardian. Completion state is derived from the real record, not click history. A second, patient-facing surface answers "what's happening to me?" grounded strictly in the patient's own recorded facts.
+
 ---
+
 ## Architecture
-Doctor Offline is not eight products. It's **three local primitives**, pointed at eight moments in a patient's stay. That reuse is the point — it's one architecture demonstrated many ways, which is exactly the kind of technical depth that separates a real system from a thin API wrapper.
+
 ```
-                         ┌──────────────────────────┐
-                         │        Gemma 4            │
-                         │   (local reasoning, LLM)  │
-                         └────────────┬──────────────┘
-                                      │
-        ┌─────────────────────────────┼─────────────────────────────┐
-        │                             │                             │
- ┌──────▼───────┐            ┌────────▼────────┐           ┌────────▼────────┐
- │ LOCAL VOICE  │            │  LOCAL VISION   │           │  LOCAL MEMORY   │
- │ speech-to-   │            │  OCR / document │           │  state that     │
- │ text + text- │            │  reading        │           │  spans time     │
- │ to-speech    │            │                 │           │  (SQLite)       │
- └──────┬───────┘            └────────┬────────┘           └────────┬────────┘
-        │                             │                             │
-   Scribe, Translation,         Consent,                    tasks, allergies,
-   Consent Q&A,                 Discharge                   reminders, Q&A log,
-   Orientation                                              handoff source
+   messy human speech / documents
+                │
+          ┌─────▼─────┐   Gemma 4 (local, via Ollama): understand + extract + phrase
+          │  GEMMA 4  │   — the language layer, never the judge
+          └─────┬─────┘
+                │  structured, category-tagged facts
+        ┌───────▼────────┐
+        │  LIVING GRAPH  │   nodes + edges, persisted per patient (SQLite)
+        └───────┬────────┘
+        ┌───────▼────────┐
+        │  THE GUARDIAN  │   deterministic rules over curated clinical data
+        └───────┬────────┘   → allergy · interaction · contradiction · forgotten order
+                │
+         a calm sentence, phrased by Gemma, shown to the clinician
 ```
-- **Local Voice** — on-device speech-to-text and text-to-speech. Powers Scribe, Translation, Consent Q&A capture, and Orientation.
-- **Local Vision** — on-device OCR / image reading for any document handed to a patient. Powers Consent and Discharge.
-- **Local Memory** — a small local database for anything that persists across the stay. Powers the task queue, allergy list, reminders, the consent Q&A log, and the notes that Handoff summarizes.
-Gemma 4 sits at the center doing the reasoning — structuring notes, translating, explaining, grounding answers in a document, phrasing orientation gently.
----
+
+**In one line:** not eight products — three local primitives (Voice, Vision, Memory) pointed at the moments of a hospital stay, with Gemma 4 as the language layer and deterministic code as the judge.
+
 ## Tech stack
-Everything runs locally. Swap any tool for one your team knows better — the architecture doesn't change.
-| Layer | Tool | Notes |
-| --- | --- | --- |
-| Reasoning / LLM | **Gemma 4 (8B, `gemma4` on Ollama)** via **Ollama** | One command to serve locally, OpenAI-compatible API to build against. Natively multimodal (vision + audio). |
-| Speech-to-text | **faster-whisper** or **whisper.cpp** | Multilingual, runs offline; handles the translation input too. |
-| Text-to-speech | **Piper** | Fast, natural local voices for spoken output. |
-| Document OCR | **Gemma 4 vision** | For consent forms and discharge papers — no separate OCR engine needed. |
-| Memory / state | **SQLite** | Stdlib, file-based, local. |
-| Orchestration + UI | **FastAPI** backend + a local web page | Serves the screen judges see; everything on `localhost`. |
----
-## How each feature works
-Short data flows. Every path starts and ends on the device.
-- **Clinical Scribe** — session audio → speech-to-text → Gemma structures it into `{chief complaint, medications, follow-ups}` → clinician reviews and edits on screen → saved to memory.
-- **Real-Time Translation** — audio in → speech-to-text (language detected) → Gemma translates → Piper speaks the other language. Reverse the direction for two-way.
-- **Consent Explainer** — form photo → OCR → Gemma explains in plain language and surfaces likely questions → patient's spoken questions captured via speech-to-text → each question and the answer given are logged to memory.
-- **Discharge Navigator** — discharge papers photo → OCR → the document text is placed in Gemma's context for grounded Q&A → red-flag symptoms matched against the sheet's listed urgent signs → follow-up reminders written to memory.
-- **Shift Handoff Generator** — the day's notes are pulled from memory → Gemma writes a structured SBAR summary.
-- **Bedside Orientation** — day, admission reason, and next step are pulled from memory → Gemma phrases them gently → Piper speaks them.
-- **Order Extraction** *(roadmap)* — rounds dictation → speech-to-text → Gemma extracts structured orders → cross-checked against the allergy/interaction list in memory → dropped into a local task queue.
-- **Alarm-Fatigue Triage** *(roadmap)* — correlate and prioritize monitor alarms locally to reduce noise. Roadmap only.
-Clinical outputs keep a human in the loop — the note is editable, and grounded Q&A answers come from the actual document rather than the model's memory, so the system assists rather than replaces clinical judgment.
----
+
+Everything below runs on the local machine. There is no cloud tier.
+
+| Layer | Choice | Why |
+|---|---|---|
+| Reasoning + vision | **Gemma 4 via Ollama** (`gemma4`), JSON mode, held warm | One command to serve; multimodal; reliable extraction |
+| Speech-to-text | **faster-whisper** (CPU, int8) | Multilingual, fully offline |
+| Text-to-speech | **Piper** | Natural local voice |
+| Memory | **SQLite** — patients, encounters, graph nodes/edges, alerts | Local, file-based, auditable |
+| Safety rules | **Curated clinical tables in code** ([core/curated.py](core/curated.py)) | Deterministic, provenance-clear, swaps 1:1 for RxNorm/DrugBank |
+| Backend | **FastAPI** | Serves the API and the built SPA on `localhost` |
+| Frontend | **React + Vite** | Guided visit flow, live graph, `NETWORK: OFF` pill, Gemma console |
+
 ## Project structure
-The layout mirrors the architecture: `core/` holds the three reusable primitives, `features/` holds thin modules that compose them.
+
 ```
 doctor-offline/
-├── app.py              # FastAPI: routes + orchestration
+├── app.py                  # FastAPI: API routes + serves the built SPA
 ├── core/
-│   ├── voice.py        # transcribe() / speak()   — whisper + Piper
-│   ├── vision.py       # ocr()                     — Gemma 4 vision
-│   ├── llm.py          # ask_gemma()               — Ollama client
-│   └── memory.py       # SQLite: patients, notes, tasks, reminders, qa_log
-├── features/
-│   ├── scribe.py
-│   ├── translate.py
-│   ├── consent.py
-│   ├── discharge.py
-│   ├── handoff.py
-│   └── orientation.py
-├── web/
-│   └── index.html      # the local UI, with a live NETWORK: OFF indicator
-├── requirements.txt
-└── README.md
+│   ├── llm.py              # the ONLY place that talks to Gemma (Ollama client, JSON mode, call log)
+│   ├── vision.py           # Gemma 4 vision OCR
+│   ├── voice.py            # faster-whisper STT + Piper TTS
+│   ├── graph.py            # the living patient knowledge graph
+│   ├── guardian.py         # deterministic safety checks (allergy / interaction / contradiction / overdue)
+│   ├── curated.py          # curated clinical tables — the auditable "judgment" layer
+│   ├── db.py / repo.py     # SQLite persistence
+│   ├── seed.py             # seeded demo patient (María)
+│   └── config.py           # model tags, hosts, demo time-scaling
+├── features/               # thin modules composing the core: scribe, consent,
+│                           # prescription, discharge, handoff, orientation, patient, memory
+├── web/                    # React + Vite SPA (clinician + patient surfaces)
+└── data/                   # local SQLite DB + media — never leaves the machine
 ```
----
+
 ## Getting started
-### Prerequisites
-- Python 3.11+
-- [Ollama](https://ollama.com) installed
-- ~10 GB free disk for the models
-### Setup
+
+**Prerequisites:** Python 3.11+, Node 18+, [Ollama](https://ollama.com), ~10 GB disk for models.
+
 ```bash
-# 1. Clone the repo
-git clone <your-repo-url> doctor-offline && cd doctor-offline
-# 2. Create the environment
+# 1. Clone
+git clone git@github.com:Arnav710/build-with-gemma.git && cd build-with-gemma
+
+# 2. Pull Gemma 4 locally
+ollama pull gemma4
+
+# 3. Backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-# 3. Pull Gemma 4 locally (use whatever tag Ollama exposes for the event build)
-ollama pull gemma4
-# 4. Run it
+
+# 4. Frontend
+cd web && npm install && npm run build && cd ..
+
+# 5. Run — everything on localhost
 uvicorn app:app --reload
 # open http://localhost:8000
 ```
-`requirements.txt` (starting point):
-```
-fastapi
-uvicorn
-faster-whisper
-piper-tts
-pillow
-ollama
-```
+
+For frontend development, run `npm run dev` inside `web/` — Vite proxies `/api` and `/media` to the backend on port 8000.
+
 ### Prove it's offline
-The privacy claim is verifiable in one step:
+
 ```bash
-# turn off Wi-Fi / pull the network cable, then use the app
-# transcription, notes, translation, and Q&A all keep working
+# turn off Wi-Fi / pull the network cable, then keep using the app:
+# dictation, extraction, OCR, Q&A, and Guardian alerts all keep working.
 ```
-Core inference runs entirely on the device — nothing calls out.
+
+The Gemma console in the UI shows each call's prompt, output, and latency — all local.
+
+## Repeatable tests
+
+The seeded patient makes the safety behavior reproducible on any machine (logins: `doctor/confide`, `maria/confide`):
+
+| # | Input (dictate / type) | Expected Guardian behavior |
+|---|---|---|
+| T1 | "Start her on **ibuprofen** for the pain." | 🔴 Critical: NSAID + anticoagulant (warfarin) bleeding risk |
+| T2 | "Let's give **amoxicillin**." | 🔴 Critical: penicillin-class vs. penicillin allergy on file |
+| T3 | "She says she's **not on any blood thinners**." | 🟠 Warning: contradicts warfarin recorded at admission |
+| T4 | "**Recheck troponin in 3 hours**", then end the encounter | 🟠 Warning: order window elapsed, nothing marked done |
+| T5 | "**Continue the warfarin.**" | No duplicate node, no duplicate alert |
+| T6 | Any of the above **with Wi-Fi off** | Identical behavior; Gemma console shows local latency |
+
+Because the checks are code, not a model roll of the dice, these pass the same way every run — the property that matters for a safety feature.
+
+## Honest limitations
+
+- The curated drug tables are a **demonstration set**, not a complete formulary; production swaps them 1:1 for RxNorm/DrugBank without touching the architecture.
+- Extraction quality is bounded by Gemma and by STT on noisy bedside audio — which is exactly why facts are editable, confidence-scored (`unconfirmed` when unsure), and why judgment is never left to the model.
+- Confide **assists** clinical judgment; it does not replace it. Notes are editable drafts, answers are grounded in documents, and alerts are surfaced — never executed.
+
 ---
-## Demo (offline patient journey)
-The demo walks one patient through the stay with the network disabled the whole time.
-1. Show the screen — **network is off**.
-2. **Rounds** — dictate a short note; the structured note appears locally; edit a line.
-3. **Consent** — upload a form; Doctor Offline explains it; ask a question aloud; the Q&A is logged.
-4. **Discharge** — ask "when can I shower?"; a grounded answer comes from the papers; a red-flag symptom is flagged; a reminder is set.
-5. If time: say a line in another language and hear it back (Translation); trigger the bedside voice (Orientation); generate a one-tap SBAR summary (Handoff).
-Closing line: *one patient, local voice, local vision, local memory, and the internet was off the whole time.*
----
-## Privacy & safety
-- **Nothing leaves the device.** Audio and images are processed locally and are not transmitted.
-- **Human in the loop.** Clinical notes are reviewed and edited by staff before they count; Doctor Offline assists documentation, it doesn't replace judgment.
-- **Grounded answers.** Discharge and consent Q&A are answered from the actual document, not the model's recollection, to reduce hallucination.
-- **Verified allergy checks** (roadmap order extraction) are matched against a stored list, not the model's memory.
----
-## Roadmap
-- **Order extraction from rounds** — structured order parsing under noisy audio, with trustworthy allergy/interaction cross-checks.
-- **Alarm-fatigue triage** — local correlation and prioritization of monitor alarms.
-- Broader multilingual coverage and clinician-facing note templates.
----
-## Acknowledgements
-Built for the **Build with Gemma / JustBuild** hackathon (On-Device AI track) — Pattern, Lehi, UT. Powered by Gemma 4, running entirely on-device.
+
+Built for the **Build with Gemma** hackathon (On-Device AI track). Powered by **Gemma 4**, running entirely on-prem.
+
+**Confide — a second clinician in the room that never forgets, and never phones home.**
