@@ -14,7 +14,8 @@ from pydantic import BaseModel
 from core import db
 from core.config import MEDIA_DIR, OLLAMA_HOST, OLLAMA_MODEL, ROOT
 from core.deps import require_staff
-from features import consent, discharge, handoff, orientation, scribe, translate
+from features import consent, live, scribe, visits
+from features.visits import _summarize_visit
 
 WEB_DIR = ROOT / "web"
 
@@ -124,7 +125,8 @@ def api_list_patients(status: Optional[str] = None, search: Optional[str] = None
 @app.post("/api/patients")
 def api_create_patient(body: PatientCreate):
     require_staff(body.staff_id)
-    return db.create_patient(
+    was_returning = bool(body.mrn and db.get_patient_by_mrn(body.mrn))
+    patient = db.create_patient(
         name=body.name,
         staff_id=body.staff_id,
         mrn=body.mrn,
@@ -133,6 +135,11 @@ def api_create_patient(body: PatientCreate):
         room=body.room,
         known_allergies=body.known_allergies,
     )
+    # Open a fresh visit for every admission (first-time OR returning).
+    db.open_visit(patient["id"], body.staff_id, room=body.room)
+    patient["returning"] = was_returning
+    patient["visit_count"] = len(db.list_visits(patient["id"]))
+    return patient
 
 
 @app.get("/api/patients/{patient_id}")
@@ -155,17 +162,26 @@ def api_discharge_patient(patient_id: int, body: DischargeRequest):
     require_staff(body.staff_id)
     if not db.get_patient(patient_id):
         raise HTTPException(status_code=404, detail="Patient not found")
-    return db.discharge_patient(patient_id)
+    visit = db.current_visit(patient_id)
+    patient = db.discharge_patient(patient_id)
+    # Generate visit highlights inline so the next admission can show them immediately.
+    # This is a single Gemma call — cheap on-device and central to the returning-patient story.
+    if visit:
+        try:
+            highlights = _summarize_visit(visit["id"])
+            db.set_visit_highlights(visit["id"], highlights)
+        except Exception:
+            # Never block discharge on a summary failure — highlights can be regenerated later.
+            pass
+    return patient
 
 
 # --- feature routers ----------------------------------------------------------------
 
 app.include_router(scribe.router)
-app.include_router(translate.router)
 app.include_router(consent.router)
-app.include_router(discharge.router)
-app.include_router(handoff.router)
-app.include_router(orientation.router)
+app.include_router(visits.router)
+app.include_router(live.router)
 
 
 # --- static / frontend --------------------------------------------------------------
@@ -186,5 +202,9 @@ def favicon():
 @app.get("/{full_path:path}", include_in_schema=False)
 def spa(full_path: str):
     # Client-side routing (React Router) — any non-API, non-static path falls back to
-    # index.html and the browser router takes over.
+    # index.html and the browser router takes over. Explicit /api guard so a stale
+    # server (no live routes registered yet) surfaces as a 404 instead of quietly
+    # serving the SPA bundle for API misses.
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail=f"Unknown API route: /{full_path}")
     return FileResponse(str(WEB_DIST / "index.html"))

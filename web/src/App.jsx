@@ -5,12 +5,9 @@ import RequirePatient from "./components/RequirePatient";
 import Login from "./pages/Login";
 import PatientPicker from "./pages/PatientPicker";
 import Dashboard from "./pages/Dashboard";
+import LiveRoom from "./pages/LiveRoom";
 import Scribe from "./pages/Scribe";
-import Translate from "./pages/Translate";
 import Consent from "./pages/Consent";
-import Discharge from "./pages/Discharge";
-import Handoff from "./pages/Handoff";
-import Orientation from "./pages/Orientation";
 
 export default function App() {
   return (
@@ -24,13 +21,13 @@ export default function App() {
             <Route path="/patients" element={<PatientPicker />} />
 
             <Route element={<RequirePatient />}>
+              {/* LiveRoom is the demo's home base — everything reacts to speech and camera. */}
+              <Route path="/live" element={<LiveRoom />} />
+              {/* Dashboard shows returning-patient visit highlights. */}
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/scribe" element={<Scribe />} />
-              <Route path="/translate" element={<Translate />} />
-              <Route path="/consent" element={<Consent />} />
-              <Route path="/discharge" element={<Discharge />} />
-              <Route path="/handoff" element={<Handoff />} />
-              <Route path="/orientation" element={<Orientation />} />
+              {/* Manual fallback tools if a demo beat needs to be triggered by hand. */}
+              <Route path="/tools/scribe" element={<Scribe />} />
+              <Route path="/tools/consent" element={<Consent />} />
             </Route>
           </Route>
 

@@ -31,9 +31,22 @@ CREATE TABLE IF NOT EXISTS patients (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS visits (
+    id INTEGER PRIMARY KEY,
+    patient_id INTEGER NOT NULL REFERENCES patients(id),
+    staff_id INTEGER NOT NULL REFERENCES staff(id),
+    admitted_at TEXT NOT NULL,
+    discharged_at TEXT,
+    status TEXT CHECK(status IN ('admitted','discharged')) NOT NULL DEFAULT 'admitted',
+    room TEXT,
+    highlights TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY,
     patient_id INTEGER NOT NULL REFERENCES patients(id),
+    visit_id INTEGER REFERENCES visits(id),
     staff_id INTEGER NOT NULL REFERENCES staff(id),
     raw_transcript TEXT,
     chief_complaint TEXT,
@@ -44,21 +57,10 @@ CREATE TABLE IF NOT EXISTS notes (
     updated_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS translation_logs (
-    id INTEGER PRIMARY KEY,
-    patient_id INTEGER NOT NULL REFERENCES patients(id),
-    staff_id INTEGER NOT NULL REFERENCES staff(id),
-    direction TEXT CHECK(direction IN ('patient_to_staff','staff_to_patient')) NOT NULL,
-    source_language TEXT,
-    target_language TEXT,
-    source_text TEXT,
-    translated_text TEXT,
-    created_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS consent_forms (
     id INTEGER PRIMARY KEY,
     patient_id INTEGER NOT NULL REFERENCES patients(id),
+    visit_id INTEGER REFERENCES visits(id),
     staff_id INTEGER NOT NULL REFERENCES staff(id),
     image_path TEXT NOT NULL,
     ocr_text TEXT,
@@ -79,6 +81,7 @@ CREATE TABLE IF NOT EXISTS consent_qa_log (
 CREATE TABLE IF NOT EXISTS discharge_documents (
     id INTEGER PRIMARY KEY,
     patient_id INTEGER NOT NULL REFERENCES patients(id),
+    visit_id INTEGER REFERENCES visits(id),
     staff_id INTEGER NOT NULL REFERENCES staff(id),
     image_path TEXT NOT NULL,
     ocr_text TEXT,
@@ -99,6 +102,7 @@ CREATE TABLE IF NOT EXISTS discharge_qa_log (
 CREATE TABLE IF NOT EXISTS reminders (
     id INTEGER PRIMARY KEY,
     patient_id INTEGER NOT NULL REFERENCES patients(id),
+    visit_id INTEGER REFERENCES visits(id),
     discharge_document_id INTEGER REFERENCES discharge_documents(id),
     description TEXT NOT NULL,
     remind_at TEXT NOT NULL,
@@ -106,24 +110,39 @@ CREATE TABLE IF NOT EXISTS reminders (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS entities (
+    id INTEGER PRIMARY KEY,
+    patient_id INTEGER NOT NULL REFERENCES patients(id),
+    visit_id INTEGER REFERENCES visits(id),
+    kind TEXT NOT NULL,
+    label TEXT NOT NULL,
+    source TEXT,
+    meta TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(patient_id, kind, label)
+);
+
+CREATE TABLE IF NOT EXISTS live_events (
+    id INTEGER PRIMARY KEY,
+    patient_id INTEGER NOT NULL REFERENCES patients(id),
+    visit_id INTEGER REFERENCES visits(id),
+    kind TEXT NOT NULL,
+    speaker TEXT,
+    text TEXT,
+    meta TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS handoffs (
     id INTEGER PRIMARY KEY,
     patient_id INTEGER NOT NULL REFERENCES patients(id),
+    visit_id INTEGER REFERENCES visits(id),
     staff_id INTEGER NOT NULL REFERENCES staff(id),
     situation TEXT,
     background TEXT,
     assessment TEXT,
     recommendation TEXT,
     source_note_ids TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS orientation_sessions (
-    id INTEGER PRIMARY KEY,
-    patient_id INTEGER NOT NULL REFERENCES patients(id),
-    staff_id INTEGER NOT NULL REFERENCES staff(id),
-    script_text TEXT NOT NULL,
-    audio_path TEXT,
     created_at TEXT NOT NULL
 );
 """
@@ -186,6 +205,11 @@ def list_staff() -> list[dict]:
 
 # --- patients -------------------------------------------------------------------
 
+def get_patient_by_mrn(mrn: str) -> dict | None:
+    with connect() as conn:
+        return row_to_dict(conn.execute("SELECT * FROM patients WHERE mrn = ?", (mrn,)).fetchone())
+
+
 def create_patient(
     name: str,
     staff_id: int,
@@ -195,6 +219,27 @@ def create_patient(
     room: str | None = None,
     known_allergies: str | None = None,
 ) -> dict:
+    """Create a patient. If an MRN is provided and matches an existing patient, that
+    patient is reopened (a new visit is started via `admit_patient` in the caller)."""
+    if mrn:
+        existing = get_patient_by_mrn(mrn)
+        if existing:
+            # Refresh known fields but keep patient identity stable.
+            update_patient(
+                existing["id"],
+                name=name,
+                date_of_birth=date_of_birth,
+                primary_language=primary_language,
+                room=room,
+                known_allergies=known_allergies,
+            )
+            with connect() as conn:
+                conn.execute(
+                    "UPDATE patients SET status = 'admitted', admitted_at = ?, discharged_at = NULL WHERE id = ?",
+                    (now(), existing["id"]),
+                )
+            return get_patient(existing["id"])
+
     with connect() as conn:
         ts = now()
         cur = conn.execute(
@@ -239,12 +284,72 @@ def update_patient(patient_id: int, **fields) -> dict | None:
 
 
 def discharge_patient(patient_id: int) -> dict | None:
+    ts = now()
     with connect() as conn:
         conn.execute(
             "UPDATE patients SET status = 'discharged', discharged_at = ? WHERE id = ?",
-            (now(), patient_id),
+            (ts, patient_id),
+        )
+        conn.execute(
+            "UPDATE visits SET status = 'discharged', discharged_at = ? "
+            "WHERE patient_id = ? AND status = 'admitted'",
+            (ts, patient_id),
         )
         return row_to_dict(conn.execute("SELECT * FROM patients WHERE id = ?", (patient_id,)).fetchone())
+
+
+# --- visits -------------------------------------------------------------------
+
+def open_visit(patient_id: int, staff_id: int, room: str | None = None) -> dict:
+    """Start a new visit for this patient. Called on admit / re-admit."""
+    ts = now()
+    with connect() as conn:
+        cur = conn.execute(
+            """INSERT INTO visits (patient_id, staff_id, admitted_at, status, room, created_at)
+               VALUES (?, ?, ?, 'admitted', ?, ?)""",
+            (patient_id, staff_id, ts, room, ts),
+        )
+        return row_to_dict(conn.execute("SELECT * FROM visits WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def current_visit(patient_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM visits WHERE patient_id = ? AND status = 'admitted' "
+            "ORDER BY admitted_at DESC LIMIT 1",
+            (patient_id,),
+        ).fetchone()
+        return _deserialize_visit(row) if row else None
+
+
+def list_visits(patient_id: int) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM visits WHERE patient_id = ? ORDER BY admitted_at DESC, id DESC",
+            (patient_id,),
+        ).fetchall()
+        return [_deserialize_visit(r) for r in rows]
+
+
+def get_visit(visit_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM visits WHERE id = ?", (visit_id,)).fetchone()
+        return _deserialize_visit(row) if row else None
+
+
+def _deserialize_visit(row: sqlite3.Row) -> dict:
+    d = dict(row)
+    d["highlights"] = json.loads(d["highlights"]) if d.get("highlights") else None
+    return d
+
+
+def set_visit_highlights(visit_id: int, highlights: dict) -> dict | None:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE visits SET highlights = ? WHERE id = ?",
+            (json.dumps(highlights), visit_id),
+        )
+    return get_visit(visit_id)
 
 
 # --- notes (Clinical Scribe) -----------------------------------------------------
@@ -258,21 +363,31 @@ def create_note(
     follow_ups: list[str],
     status: str = "draft",
 ) -> dict:
+    visit = current_visit(patient_id)
+    visit_id = visit["id"] if visit else None
     with connect() as conn:
         ts = now()
         cur = conn.execute(
             """INSERT INTO notes
-               (patient_id, staff_id, raw_transcript, chief_complaint, medications, follow_ups,
+               (patient_id, visit_id, staff_id, raw_transcript, chief_complaint, medications, follow_ups,
                 status, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                patient_id, staff_id, raw_transcript, chief_complaint,
+                patient_id, visit_id, staff_id, raw_transcript, chief_complaint,
                 json.dumps(medications or []), json.dumps(follow_ups or []),
                 status, ts, ts,
             ),
         )
         note_id = cur.lastrowid
     return get_note(note_id)
+
+
+def list_notes_for_visit(visit_id: int) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM notes WHERE visit_id = ? ORDER BY created_at DESC", (visit_id,)
+        ).fetchall()
+        return [_deserialize_note(r) for r in rows]
 
 
 def _deserialize_note(row: sqlite3.Row) -> dict:
@@ -311,49 +426,21 @@ def update_note(note_id: int, **fields) -> dict | None:
     return get_note(note_id)
 
 
-# --- translation logs --------------------------------------------------------------
-
-def create_translation_log(
-    patient_id: int, staff_id: int, direction: str, source_language: str,
-    target_language: str, source_text: str, translated_text: str,
-) -> dict:
-    with connect() as conn:
-        cur = conn.execute(
-            """INSERT INTO translation_logs
-               (patient_id, staff_id, direction, source_language, target_language,
-                source_text, translated_text, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (patient_id, staff_id, direction, source_language, target_language,
-             source_text, translated_text, now()),
-        )
-        return row_to_dict(
-            conn.execute("SELECT * FROM translation_logs WHERE id = ?", (cur.lastrowid,)).fetchone()
-        )
-
-
-def list_translation_logs(patient_id: int) -> list[dict]:
-    with connect() as conn:
-        return rows_to_list(
-            conn.execute(
-                "SELECT * FROM translation_logs WHERE patient_id = ? ORDER BY created_at",
-                (patient_id,),
-            ).fetchall()
-        )
-
-
 # --- consent forms / Q&A --------------------------------------------------------------
 
 def create_consent_form(
     patient_id: int, staff_id: int, image_path: str, ocr_text: str,
     plain_language_explanation: str, suggested_questions: list[str],
 ) -> dict:
+    visit = current_visit(patient_id)
+    visit_id = visit["id"] if visit else None
     with connect() as conn:
         cur = conn.execute(
             """INSERT INTO consent_forms
-               (patient_id, staff_id, image_path, ocr_text, plain_language_explanation,
+               (patient_id, visit_id, staff_id, image_path, ocr_text, plain_language_explanation,
                 suggested_questions, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (patient_id, staff_id, image_path, ocr_text, plain_language_explanation,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (patient_id, visit_id, staff_id, image_path, ocr_text, plain_language_explanation,
              json.dumps(suggested_questions or []), now()),
         )
         form_id = cur.lastrowid
@@ -408,11 +495,13 @@ def list_consent_qa(consent_form_id: int) -> list[dict]:
 def create_discharge_document(
     patient_id: int, staff_id: int, image_path: str, ocr_text: str, red_flags: list[dict],
 ) -> dict:
+    visit = current_visit(patient_id)
+    visit_id = visit["id"] if visit else None
     with connect() as conn:
         cur = conn.execute(
-            """INSERT INTO discharge_documents (patient_id, staff_id, image_path, ocr_text, red_flags, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (patient_id, staff_id, image_path, ocr_text, json.dumps(red_flags or []), now()),
+            """INSERT INTO discharge_documents (patient_id, visit_id, staff_id, image_path, ocr_text, red_flags, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (patient_id, visit_id, staff_id, image_path, ocr_text, json.dumps(red_flags or []), now()),
         )
         doc_id = cur.lastrowid
     return get_discharge_document(doc_id)
@@ -472,11 +561,13 @@ def list_discharge_qa(discharge_document_id: int) -> list[dict]:
 def create_reminder(
     patient_id: int, description: str, remind_at: str, discharge_document_id: int | None = None,
 ) -> dict:
+    visit = current_visit(patient_id)
+    visit_id = visit["id"] if visit else None
     with connect() as conn:
         cur = conn.execute(
-            """INSERT INTO reminders (patient_id, discharge_document_id, description, remind_at, status, created_at)
-               VALUES (?, ?, ?, ?, 'pending', ?)""",
-            (patient_id, discharge_document_id, description, remind_at, now()),
+            """INSERT INTO reminders (patient_id, visit_id, discharge_document_id, description, remind_at, status, created_at)
+               VALUES (?, ?, ?, ?, ?, 'pending', ?)""",
+            (patient_id, visit_id, discharge_document_id, description, remind_at, now()),
         )
         return row_to_dict(conn.execute("SELECT * FROM reminders WHERE id = ?", (cur.lastrowid,)).fetchone())
 
@@ -508,13 +599,15 @@ def create_handoff(
     patient_id: int, staff_id: int, situation: str, background: str,
     assessment: str, recommendation: str, source_note_ids: list[int],
 ) -> dict:
+    visit = current_visit(patient_id)
+    visit_id = visit["id"] if visit else None
     with connect() as conn:
         cur = conn.execute(
             """INSERT INTO handoffs
-               (patient_id, staff_id, situation, background, assessment, recommendation,
+               (patient_id, visit_id, staff_id, situation, background, assessment, recommendation,
                 source_note_ids, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (patient_id, staff_id, situation, background, assessment, recommendation,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (patient_id, visit_id, staff_id, situation, background, assessment, recommendation,
              json.dumps(source_note_ids or []), now()),
         )
         handoff_id = cur.lastrowid
@@ -560,27 +653,91 @@ def notes_since_last_handoff(patient_id: int) -> list[dict]:
         return [_deserialize_note(r) for r in rows]
 
 
-# --- orientation sessions --------------------------------------------------------------
 
-def create_orientation_session(
-    patient_id: int, staff_id: int, script_text: str, audio_path: str | None,
-) -> dict:
+
+# --- entities + live events (LiveRoom knowledge graph) ------------------------
+
+def upsert_entity(patient_id: int, kind: str, label: str,
+                  source: str | None = None, meta: dict | None = None) -> dict:
+    """Insert an entity (allergy/drug/symptom/etc.) or return the existing row.
+    Uniqueness is (patient_id, kind, label) so mentioning the same drug twice
+    doesn't clutter the graph — the node just stays there."""
+    visit = current_visit(patient_id)
+    visit_id = visit["id"] if visit else None
+    label_norm = (label or "").strip()
+    if not label_norm:
+        raise ValueError("entity label required")
+    with connect() as conn:
+        existing = conn.execute(
+            "SELECT * FROM entities WHERE patient_id = ? AND kind = ? AND LOWER(label) = LOWER(?)",
+            (patient_id, kind, label_norm),
+        ).fetchone()
+        if existing:
+            return dict(existing)
+        cur = conn.execute(
+            """INSERT INTO entities (patient_id, visit_id, kind, label, source, meta, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (patient_id, visit_id, kind, label_norm, source,
+             json.dumps(meta or {}), now()),
+        )
+        return dict(conn.execute("SELECT * FROM entities WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def list_entities(patient_id: int) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM entities WHERE patient_id = ? ORDER BY created_at",
+            (patient_id,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["meta"] = json.loads(d["meta"]) if d["meta"] else {}
+        except json.JSONDecodeError:
+            d["meta"] = {}
+        out.append(d)
+    return out
+
+
+def record_live_event(patient_id: int, kind: str, text: str | None = None,
+                      speaker: str | None = None, meta: dict | None = None) -> dict:
+    visit = current_visit(patient_id)
+    visit_id = visit["id"] if visit else None
     with connect() as conn:
         cur = conn.execute(
-            """INSERT INTO orientation_sessions (patient_id, staff_id, script_text, audio_path, created_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (patient_id, staff_id, script_text, audio_path, now()),
+            """INSERT INTO live_events (patient_id, visit_id, kind, speaker, text, meta, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (patient_id, visit_id, kind, speaker, text,
+             json.dumps(meta or {}), now()),
         )
-        return row_to_dict(
-            conn.execute("SELECT * FROM orientation_sessions WHERE id = ?", (cur.lastrowid,)).fetchone()
-        )
+        row = conn.execute("SELECT * FROM live_events WHERE id = ?", (cur.lastrowid,)).fetchone()
+    d = dict(row)
+    try:
+        d["meta"] = json.loads(d["meta"]) if d["meta"] else {}
+    except json.JSONDecodeError:
+        d["meta"] = {}
+    return d
 
 
-def latest_orientation_session(patient_id: int) -> dict | None:
+def list_live_events(patient_id: int, since_id: int | None = None) -> list[dict]:
     with connect() as conn:
-        return row_to_dict(
-            conn.execute(
-                "SELECT * FROM orientation_sessions WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1",
+        if since_id is not None:
+            rows = conn.execute(
+                "SELECT * FROM live_events WHERE patient_id = ? AND id > ? ORDER BY id",
+                (patient_id, since_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM live_events WHERE patient_id = ? ORDER BY id",
                 (patient_id,),
-            ).fetchone()
-        )
+            ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["meta"] = json.loads(d["meta"]) if d["meta"] else {}
+        except json.JSONDecodeError:
+            d["meta"] = {}
+        out.append(d)
+    return out

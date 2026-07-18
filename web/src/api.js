@@ -84,18 +84,9 @@ export const api = {
   getNote: (id) => request("GET", `/api/notes/${id}`),
   updateNote: (id, body) => request("PUT", `/api/notes/${id}`, { json: body }),
 
-  // translate
-  translateTurn: (audioBlob, { patient_id, staff_id, direction, target_language }) => {
-    const form = new FormData();
-    form.append("audio", audioBlob, "turn.webm");
-    form.append("patient_id", patient_id);
-    form.append("staff_id", staff_id);
-    form.append("direction", direction);
-    form.append("target_language", target_language);
-    return request("POST", "/api/translate/turn", { form });
-  },
-  listTranslationLogs: (patient_id) =>
-    request("GET", "/api/translate/logs", { params: { patient_id } }),
+  // visits (cross-visit patient memory)
+  listVisits: (patient_id) => request("GET", `/api/visits/${patient_id}`),
+  summarizeVisit: (visit_id) => request("POST", `/api/visits/${visit_id}/summarize`),
 
   // consent
   createConsentForm: (imageBlob, patient_id, staff_id) => {
@@ -117,41 +108,22 @@ export const api = {
   },
   listConsentQuestions: (formId) => request("GET", `/api/consent/forms/${formId}/questions`),
 
-  // discharge
-  createDischargeDocument: (imageBlob, patient_id, staff_id) => {
+  // live room (always-on mic + camera). Streams are short chunks (~3-4s) —
+  // the client owns the loop and each chunk is stateless on the server side.
+  liveStream: (audioBlob, patient_id, speaker) => {
     const form = new FormData();
-    form.append("image", imageBlob, "papers.jpg");
+    form.append("audio", audioBlob, "chunk.webm");
     form.append("patient_id", patient_id);
-    form.append("staff_id", staff_id);
-    return request("POST", "/api/discharge/documents", { form });
+    if (speaker) form.append("speaker", speaker);
+    return request("POST", "/api/live/stream", { form });
   },
-  listDischargeDocuments: (patient_id) =>
-    request("GET", "/api/discharge/documents", { params: { patient_id } }),
-  getDischargeDocument: (id) => request("GET", `/api/discharge/documents/${id}`),
-  askDischargeQuestion: (docId, patient_id, { questionText, audioBlob }) => {
+  liveVision: (imageBlob, patient_id) => {
     const form = new FormData();
+    form.append("image", imageBlob, "frame.jpg");
     form.append("patient_id", patient_id);
-    if (audioBlob) form.append("audio", audioBlob, "question.webm");
-    if (questionText) form.append("question_text", questionText);
-    return request("POST", `/api/discharge/documents/${docId}/questions`, { form });
+    return request("POST", "/api/live/vision", { form });
   },
-  listDischargeQuestions: (docId) => request("GET", `/api/discharge/documents/${docId}/questions`),
-  createReminder: (docId, description, remind_at) =>
-    request("POST", `/api/discharge/documents/${docId}/reminders`, {
-      json: { description, remind_at },
-    }),
-  listReminders: (patient_id, status) =>
-    request("GET", "/api/reminders", { params: { patient_id, status } }),
-  updateReminder: (id, body) => request("PUT", `/api/reminders/${id}`, { json: body }),
-
-  // handoff
-  generateHandoff: (patient_id, staff_id) =>
-    request("POST", "/api/handoff", { json: { patient_id, staff_id } }),
-  listHandoffs: (patient_id) => request("GET", "/api/handoff", { params: { patient_id } }),
-  getHandoff: (id) => request("GET", `/api/handoff/${id}`),
-
-  // orientation
-  generateOrientation: (patientId, staff_id) =>
-    request("POST", `/api/orientation/${patientId}/generate`, { json: { staff_id } }),
-  latestOrientation: (patientId) => request("GET", `/api/orientation/${patientId}/latest`),
+  liveGraph: (patient_id) => request("GET", `/api/live/graph/${patient_id}`),
+  liveEvents: (patient_id, since) =>
+    request("GET", `/api/live/events/${patient_id}`, { params: { since } }),
 };

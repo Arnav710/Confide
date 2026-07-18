@@ -3,14 +3,14 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 
+// LiveRoom leads — the demo is single-screen. Dashboard is the memory/highlights
+// view. Individual tools live under /tools/* as a manual fallback if a beat needs
+// to be triggered by hand.
 const FEATURE_LINKS = [
+  ["/live", "Live Room"],
   ["/dashboard", "Dashboard"],
-  ["/scribe", "Scribe"],
-  ["/translate", "Translate"],
-  ["/consent", "Consent"],
-  ["/discharge", "Discharge"],
-  ["/handoff", "Handoff"],
-  ["/orientation", "Orientation"],
+  ["/tools/scribe", "Scribe"],
+  ["/tools/consent", "Consent"],
 ];
 
 export default function TopBar() {

@@ -29,7 +29,7 @@ _orig_request = requests.Session.request
 
 def _timeout_request(self, method, url, **kwargs):
     # Generous: vision OCR alone takes ~50s on this hardware, and endpoints like
-    # consent/discharge document ingestion chain two sequential Gemma calls.
+    # consent document ingestion chain two sequential Gemma calls.
     kwargs.setdefault("timeout", 300)
     return _orig_request(self, method, url, **kwargs)
 
@@ -169,98 +169,35 @@ def main() -> None:
     r = requests.get(f"{BASE}/api/consent/forms/{form_id}")
     check("GET consent form detail includes qa_log", len(r.json()["qa_log"]) >= 1)
 
-    print("\n[5] Discharge Navigator")
-    discharge_img = make_test_image(
-        "DISCHARGE INSTRUCTIONS\n\nTake amoxicillin as prescribed until finished.\n"
-        "You may shower normally.\n"
-        "Call your doctor or go to the ER immediately if you develop a fever above "
-        "101F or notice redness spreading from the incision site.",
-        "discharge.png",
-    )
-    with open(discharge_img, "rb") as f:
-        r = requests.post(
-            f"{BASE}/api/discharge/documents",
-            data={"patient_id": patient_id, "staff_id": staff_id},
-            files={"image": f},
-        )
-    check("POST /api/discharge/documents 200", r.status_code == 200, r.text)
-    discharge_doc = r.json()
-    doc_id = discharge_doc["id"]
-    print("      red_flags:", discharge_doc["red_flags"])
-    check("red_flags extracted", len(discharge_doc["red_flags"]) >= 1)
-
-    r = requests.post(
-        f"{BASE}/api/discharge/documents/{doc_id}/questions",
-        data={"patient_id": patient_id, "question_text": "I have a fever of 102, is that a problem?"},
-    )
-    check("POST discharge question (red flag) 200", r.status_code == 200, r.text)
-    qa = r.json()
-    print("      answer:", qa["answer_text"], "| is_red_flag:", qa["is_red_flag"])
-    check("fever question flagged as red flag", qa["is_red_flag"] is True, qa)
-
-    r = requests.post(
-        f"{BASE}/api/discharge/documents/{doc_id}/questions",
-        data={"patient_id": patient_id, "question_text": "When can I shower?"},
-    )
-    check("POST discharge question (non red flag) 200", r.status_code == 200, r.text)
-    print("      answer:", r.json()["answer_text"], "| is_red_flag:", r.json()["is_red_flag"])
-
-    r = requests.post(
-        f"{BASE}/api/discharge/documents/{doc_id}/reminders",
-        json={"description": "Follow-up appointment", "remind_at": "2026-08-01T09:00:00"},
-    )
-    check("POST reminder 200", r.status_code == 200, r.text)
-    reminder_id = r.json()["id"]
-
-    r = requests.get(f"{BASE}/api/reminders", params={"patient_id": patient_id})
-    check("GET /api/reminders lists reminder", any(rr["id"] == reminder_id for rr in r.json()))
-
-    r = requests.put(f"{BASE}/api/reminders/{reminder_id}", json={"status": "done"})
-    check("PUT reminder marks done", r.json()["status"] == "done", r.text)
-
-    print("\n[6] Shift Handoff Generator")
-    r = requests.post(f"{BASE}/api/handoff", json={"patient_id": patient_id, "staff_id": staff_id})
-    check("POST /api/handoff 200", r.status_code == 200, r.text)
-    handoff = r.json()
-    print("      SBAR:", {k: handoff[k] for k in ("situation", "background", "assessment", "recommendation")})
-    check("handoff has situation", len(handoff["situation"]) > 0)
-
-    r = requests.get(f"{BASE}/api/handoff", params={"patient_id": patient_id})
-    check("GET /api/handoff lists it", any(h["id"] == handoff["id"] for h in r.json()))
-
-    print("\n[7] Real-Time Translation")
-    turn_audio = make_test_audio("Where does it hurt?")
-    with open(turn_audio, "rb") as f:
-        r = requests.post(
-            f"{BASE}/api/translate/turn",
-            data={
-                "patient_id": patient_id, "staff_id": staff_id,
-                "direction": "staff_to_patient", "target_language": "Spanish",
-            },
-            files={"audio": f},
-        )
-    check("POST /api/translate/turn 200", r.status_code == 200, r.text)
-    turn = r.json()
-    print("      source:", turn["source_text"], "-> translated:", turn["translated_text"])
-    check("translation audio_url present", turn["audio_url"].startswith("/media/"))
-
-    r = requests.get(f"{BASE}/api/translate/logs", params={"patient_id": patient_id})
-    check("GET /api/translate/logs lists turn", len(r.json()) >= 1)
-
-    print("\n[8] Bedside Orientation")
-    r = requests.post(f"{BASE}/api/orientation/{patient_id}/generate", json={"staff_id": staff_id})
-    check("POST /api/orientation/{id}/generate 200", r.status_code == 200, r.text)
-    orientation = r.json()
-    print("      script:", orientation["script_text"])
-    check("orientation audio_url present", orientation["audio_url"].startswith("/media/"))
-
-    r = requests.get(f"{BASE}/api/orientation/{patient_id}/latest")
-    check("GET orientation latest 200", r.status_code == 200, r.text)
-
-    print("\n[9] Discharge patient")
+    print("\n[5] Discharge + visit highlights")
+    mrn = patient["mrn"]
     r = requests.post(f"{BASE}/api/patients/{patient_id}/discharge", json={"staff_id": staff_id})
     check("POST /api/patients/{id}/discharge 200", r.status_code == 200, r.text)
     check("patient status now discharged", r.json()["status"] == "discharged")
+
+    r = requests.get(f"{BASE}/api/visits/{patient_id}")
+    check("GET /api/visits/{id} 200", r.status_code == 200, r.text)
+    visits_list = r.json()
+    check("one visit recorded", len(visits_list) == 1, visits_list)
+    check("visit is discharged", visits_list[0]["status"] == "discharged")
+    check("visit has highlights", visits_list[0]["highlights"] is not None, visits_list[0])
+    print("      highlights:", visits_list[0]["highlights"])
+
+    print("\n[6] Returning patient (re-admit by MRN)")
+    r = requests.post(
+        f"{BASE}/api/patients",
+        json={"name": "Jane Doe", "staff_id": staff_id, "mrn": mrn, "room": "301B"},
+    )
+    check("POST /api/patients (same MRN) 200", r.status_code == 200, r.text)
+    returning = r.json()
+    check("returning flag set", returning.get("returning") is True, returning)
+    check("patient id preserved", returning["id"] == patient_id)
+    check("visit_count is 2", returning.get("visit_count") == 2, returning)
+
+    r = requests.get(f"{BASE}/api/visits/{patient_id}")
+    visits_after = r.json()
+    check("two visits now", len(visits_after) == 2, visits_after)
+    check("new visit is admitted", visits_after[0]["status"] == "admitted")
 
     print("\nAll checks passed.")
 

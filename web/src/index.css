@@ -86,6 +86,9 @@ main#app {
   margin: 24px auto;
   padding: 0 16px 60px;
 }
+main#app:has(.live-room) {
+  max-width: 1400px;
+}
 
 .card {
   background: var(--panel);
@@ -237,4 +240,67 @@ pre {
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 13px;
+}
+
+/* Live Room ---------------------------------------------------------- */
+.live-room {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.live-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 4px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.live-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.live-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 12px;
+}
+.live-panel {
+  min-height: 460px;
+}
+@media (max-width: 1024px) {
+  .live-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.transcript-scroll {
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.transcript-line {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.transcript-line:last-child {
+  border-bottom: none;
+}
+.alert {
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  border: 1px solid var(--danger);
+  background: #fee2e2;
+  color: var(--danger);
+}
+.alert-medium {
+  border-color: #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
+}
+.memory-graph {
+  width: 100%;
+  height: auto;
+  color: var(--text);
 }
