@@ -87,6 +87,7 @@ function AdmitModal({ staff, onClose, onDone }) {
   const [f, setF] = useState({
     name: "", age: "", room: "", mrn: "", reason_for_visit: "",
     username: "", password: "confide", allergies: "", medications: "",
+    primary_language: "en",
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -104,6 +105,7 @@ function AdmitModal({ staff, onClose, onDone }) {
         room: f.room || null,
         mrn: f.mrn || null,
         reason_for_visit: f.reason_for_visit || null,
+        primary_language: f.primary_language || "en",
         username: f.username || null,
         password: f.password || null,
         known_allergies: f.allergies ? f.allergies.split(",").map((s) => s.trim()).filter(Boolean) : [],
@@ -133,7 +135,17 @@ function AdmitModal({ staff, onClose, onDone }) {
             <label className="field"><span>Room</span><input className="input" value={f.room} onChange={set("room")} placeholder="4B" /></label>
             <label className="field"><span>MRN</span><input className="input" value={f.mrn} onChange={set("mrn")} placeholder="MRN-04821" /></label>
           </div>
-          <label className="field"><span>Reason for visit</span><input className="input" value={f.reason_for_visit} onChange={set("reason_for_visit")} placeholder="Chest pain" /></label>
+          <div className="two">
+            <label className="field"><span>Reason for visit</span><input className="input" value={f.reason_for_visit} onChange={set("reason_for_visit")} placeholder="Chest pain" /></label>
+            <label className="field"><span>Preferred language</span>
+              <select className="input" value={f.primary_language} onChange={set("primary_language")}>
+                <option value="en">English</option><option value="es">Español</option>
+                <option value="zh">中文</option><option value="fr">Français</option>
+                <option value="hi">हिन्दी</option><option value="ar">العربية</option>
+                <option value="pt">Português</option><option value="vi">Tiếng Việt</option>
+              </select>
+            </label>
+          </div>
           <label className="field"><span>Known allergies (comma-separated)</span><input className="input" value={f.allergies} onChange={set("allergies")} placeholder="Penicillin" /></label>
           <label className="field"><span>Current medications (comma-separated)</span><input className="input" value={f.medications} onChange={set("medications")} placeholder="Warfarin" /></label>
           <div className="sep" />

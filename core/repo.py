@@ -85,6 +85,14 @@ def discharge_patient(patient_id: int) -> dict | None:
     return get_patient(patient_id)
 
 
+def set_patient_language(patient_id: int, language: str) -> dict | None:
+    """The patient's chosen language for everything they see. Set by the clinician at
+    admission and adjustable by the patient in their own view."""
+    with db.connect() as conn:
+        conn.execute("UPDATE patients SET primary_language=? WHERE id=?", (language, patient_id))
+    return get_patient(patient_id)
+
+
 # --- encounters --------------------------------------------------------------
 
 def create_encounter(patient_id, staff_id, kind, raw_transcript=None, chief_complaint=None,
