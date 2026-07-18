@@ -37,7 +37,7 @@ Patient's question or reported symptom: {question}
 
 Return JSON:
 {{
-  "answer": "1-3 calm, plain sentences grounded in the sheet.",
+  "answer": "1-3 calm, plain sentences grounded ONLY in the sheet. If the sheet does not address the question, say so plainly (e.g. 'Your discharge sheet doesn't address that — please ask your care team') instead of answering with unrelated details.",
   "is_red_flag": true if the patient's message matches or resembles one of the red-flag symptoms above, else false,
   "urgency": "one short line ONLY if is_red_flag is true, telling them what to do now (e.g. 'This is urgent — call your care team or go to the ER.'), else null"
 }}
