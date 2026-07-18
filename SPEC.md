@@ -12,8 +12,12 @@ no screens, per the README's own priority split.
 
 ## Decisions locked in before writing this spec
 
-- **Model**: text-only Gemma via Ollama (e.g. `gemma2:9b` — confirm exact tag you have pulled).
-- **OCR**: Tesseract (`pytesseract`), separate from the LLM.
+- **Model**: `gemma4:latest` via Ollama — confirmed 8.0B parameters, Q4_K_M quantization, 131072
+  context length, natively multimodal (vision + audio capable, per `ollama show gemma4`).
+- **OCR**: Gemma's native vision, not Tesseract. `core/vision.py`'s `ocr()` sends the image
+  straight to `gemma4` with a "transcribe all text verbatim" prompt instead of shelling out to
+  Tesseract — one fewer dependency, and better handling of messy/handwritten forms. STT stays on
+  faster-whisper (see below) rather than Gemma's audio capability, which is unproven for this yet.
 - **Voice/image I/O**: record-then-submit. The browser records a full audio clip or captures a
   photo and POSTs it; the backend replies with a finished result. No WebSocket streaming.
 - **Multi-user**: the system supports many staff and many patients. Any single *interaction*
@@ -36,15 +40,15 @@ no screens, per the README's own priority split.
 Same three primitives as the README, now with concrete module responsibilities:
 
 ```
-core/voice.py    transcribe(audio_path) -> (text, detected_lang)
-                 speak(text, lang) -> audio_path
-core/vision.py   ocr(image_path) -> text
-core/llm.py      ask_gemma(prompt, system=None) -> text   (thin Ollama wrapper)
+core/voice.py    transcribe(audio_path) -> (text, detected_lang)   -- faster-whisper
+                 speak(text, lang) -> audio_path                  -- Piper
+core/vision.py   ocr(image_path) -> text                          -- gemma4 vision, via Ollama
+core/llm.py      ask_gemma(prompt, system=None) -> text           (thin Ollama wrapper, model="gemma4")
 core/db.py       SQLite connection + schema + typed helper functions per table
 ```
 
 Every `features/*.py` module composes these four functions plus its own prompt templates. No
-feature module talks to Ollama, Tesseract, or SQLite directly except through `core/`.
+feature module talks to Ollama, faster-whisper, or SQLite directly except through `core/`.
 
 ## 2. Data model
 

@@ -76,10 +76,10 @@ Gemma 4 sits at the center doing the reasoning — structuring notes, translatin
 Everything runs locally. Swap any tool for one your team knows better — the architecture doesn't change.
 | Layer | Tool | Notes |
 | --- | --- | --- |
-| Reasoning / LLM | **Gemma 4 (2B or 4B)** via **Ollama** | One command to serve locally, OpenAI-compatible API to build against. |
+| Reasoning / LLM | **Gemma 4 (8B, `gemma4` on Ollama)** via **Ollama** | One command to serve locally, OpenAI-compatible API to build against. Natively multimodal (vision + audio). |
 | Speech-to-text | **faster-whisper** or **whisper.cpp** | Multilingual, runs offline; handles the translation input too. |
 | Text-to-speech | **Piper** | Fast, natural local voices for spoken output. |
-| Document OCR | **Gemma 4 vision** if your build is multimodal, else **Tesseract** | For consent forms and discharge papers. |
+| Document OCR | **Gemma 4 vision** | For consent forms and discharge papers — no separate OCR engine needed. |
 | Memory / state | **SQLite** | Stdlib, file-based, local. |
 | Orchestration + UI | **FastAPI** backend + a local web page | Serves the screen judges see; everything on `localhost`. |
 ---
@@ -102,7 +102,7 @@ doctor-offline/
 ├── app.py              # FastAPI: routes + orchestration
 ├── core/
 │   ├── voice.py        # transcribe() / speak()   — whisper + Piper
-│   ├── vision.py       # ocr()                     — Tesseract / Gemma vision
+│   ├── vision.py       # ocr()                     — Gemma 4 vision
 │   ├── llm.py          # ask_gemma()               — Ollama client
 │   └── memory.py       # SQLite: patients, notes, tasks, reminders, qa_log
 ├── features/
@@ -122,8 +122,7 @@ doctor-offline/
 ### Prerequisites
 - Python 3.11+
 - [Ollama](https://ollama.com) installed
-- Tesseract installed (`brew install tesseract` / `apt install tesseract-ocr`) if you're not using Gemma's vision
-- ~8 GB free disk for the models
+- ~10 GB free disk for the models
 ### Setup
 ```bash
 # 1. Clone the repo
@@ -143,7 +142,6 @@ fastapi
 uvicorn
 faster-whisper
 piper-tts
-pytesseract
 pillow
 ollama
 ```
