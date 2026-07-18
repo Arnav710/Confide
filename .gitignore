@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+data/medmemo.db
+data/audio/
+models/*.onnx
+models/*.onnx.json
+.env
+*.log
