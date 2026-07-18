@@ -23,8 +23,8 @@ async function req(path, { method = "GET", body, form } = {}) {
   return res.json();
 }
 
-// Streams a text/plain response, invoking onToken(fullTextSoFar) as chunks
-// arrive. Returns the complete text when the stream ends.
+// Streams a text/plain response, invoking onToken(fullTextSoFar) as chunks arrive.
+// Returns the complete text when the stream ends.
 async function streamReq(path, body, onToken) {
   const res = await fetch(path, {
     method: "POST",
@@ -131,22 +131,40 @@ export const api = {
     req("/api/handoff", { method: "POST", body: { patient_id: id, staff_id: staffId } }),
   handoffHistory: (id) => req(`/api/handoff?patient_id=${id}`),
 
-  // orientation
-  orient: (id, staffId) =>
-    req(`/api/orientation/${id}/generate`, { method: "POST", body: { staff_id: staffId } }),
-
   // reminders
   reminders: (id, status) =>
     req(`/api/patients/${id}/reminders${status ? `?status=${status}` : ""}`),
   addReminder: (id, data) => req(`/api/patients/${id}/reminders`, { method: "POST", body: data }),
   updateReminder: (rid, status) => req(`/api/reminders/${rid}`, { method: "PUT", body: { status } }),
 
-  // patient-facing
-  patientChat: (id, message) =>
-    req("/api/patient/chat", { method: "POST", body: { patient_id: id, message } }),
-  patientChatStream: (id, message, onToken) =>
-    streamReq("/api/patient/chat/stream", { patient_id: id, message }, onToken),
-  patientDebrief: (id) => req(`/api/patient/debrief/${id}`, { method: "POST" }),
+  // patient-facing (everything renders in the patient's chosen language)
+  setPatientLanguage: (id, language) =>
+    req(`/api/patient/${id}/language`, { method: "POST", body: { language } }),
+  patientChat: (id, message, language) =>
+    req("/api/patient/chat", { method: "POST", body: { patient_id: id, message, language } }),
+  patientChatStream: (id, message, onToken, language) =>
+    streamReq("/api/patient/chat/stream", { patient_id: id, message, language }, onToken),
+  patientDebrief: (id, language) =>
+    req(`/api/patient/debrief/${id}${language ? `?language=${language}` : ""}`, { method: "POST" }),
   patientHistory: (id) => req(`/api/patient/history?patient_id=${id}`),
   patientReminders: (id) => req(`/api/patient/reminders?patient_id=${id}`),
+  patientMedications: (id, language) =>
+    req(`/api/patient/medications?patient_id=${id}${language ? `&language=${language}` : ""}`),
+  patientMedPurposes: (id, language) =>
+    req(`/api/patient/medications/purposes?patient_id=${id}${language ? `&language=${language}` : ""}`),
+  patientMedCheck: (id, { text, file, language, addToRecord } = {}) => {
+    const form = new FormData();
+    form.append("patient_id", id);
+    if (language) form.append("language", language);
+    if (text) form.append("text", text);
+    if (file) form.append("image", file);
+    if (addToRecord) form.append("add_to_record", "true");
+    return req("/api/patient/medications/check", { method: "POST", form });
+  },
+  patientJourney: (id, language, translate) =>
+    req(`/api/patient/journey?patient_id=${id}${language ? `&language=${language}` : ""}${translate ? "&translate=true" : ""}`),
+  patientVisitRecap: (id, { admitted_at, discharged_at, language } = {}) =>
+    req("/api/patient/visits/recap", { method: "POST", body: { patient_id: id, admitted_at, discharged_at, language } }),
+  orient: (id, staffId, language) =>
+    req(`/api/orientation/${id}/generate`, { method: "POST", body: { staff_id: staffId, language } }),
 };

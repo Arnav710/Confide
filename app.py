@@ -112,7 +112,8 @@ def patient_login(body: PatientLogin):
     p = repo.patient_by_username(body.username)
     if not p or not p.get("password_hash") or not db.verify_password(body.password, p["password_hash"]):
         raise HTTPException(401, "Invalid username or password")
-    return {"patient_id": p["id"], "name": p["name"]}
+    # Return the patient's language so their dashboard opens in it immediately.
+    return {"patient_id": p["id"], "name": p["name"], "primary_language": p.get("primary_language") or "en"}
 
 
 # --- patients ----------------------------------------------------------------
