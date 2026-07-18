@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { session } from "../lib/session.js";
 import NetworkPill from "../components/NetworkPill.jsx";
+import GemmaConsole from "../components/GemmaConsole.jsx";
 
 // The patient's own space — everything about their care, in their language, entirely on
 // their side and on-device. Three tabs: Home (orientation + ask-anything), My medicines
@@ -130,6 +131,8 @@ export default function PatientHome() {
         {tab === "journey" && <JourneyTab me={me} lang={lang} journey={journey} />}
       </div>
 
+      <GemmaConsole />
+
       <style>{`
         .ph { min-height:100vh; }
         .ph-top { display:flex; justify-content:space-between; align-items:center; padding:16px 28px;
@@ -170,14 +173,17 @@ function HomeTab({ me, lang, day, dayBusy, loadDay }) {
   async function send(text) {
     const msg = text ?? input;
     if (!msg.trim()) return;
-    setMessages((m) => [...m, { from: "me", text: msg }]);
+    // User bubble + an empty Confide bubble that streams tokens as they arrive.
+    setMessages((m) => [...m, { from: "me", text: msg }, { from: "confide", text: "" }]);
     setInput(""); setBusy(true);
+    const fill = (t) => setMessages((m) => {
+      const c = [...m]; c[c.length - 1] = { from: "confide", text: t }; return c;
+    });
     try {
-      const res = await api.patientChat(me.patient_id, msg, lang);
-      setMessages((m) => [...m, { from: "confide", text: res.answer }]);
-      speak(res.answer, lang);
+      const full = await api.patientChatStream(me.patient_id, msg, fill, lang);
+      speak(full, lang);
     } catch {
-      setMessages((m) => [...m, { from: "confide", text: "I'm having trouble — please ask your nurse." }]);
+      fill("I'm having trouble — please ask your nurse.");
     } finally { setBusy(false); }
   }
 
@@ -199,13 +205,18 @@ function HomeTab({ me, lang, day, dayBusy, loadDay }) {
           )}
           {messages.map((m, i) => (
             <div key={i} className={`bubble ${m.from}`}>
-              {m.text}
-              {m.from === "confide" && (
-                <button className="bubble-speak" onClick={() => speak(m.text, lang)} title="Read aloud">🔊</button>
+              {m.from === "confide" && !m.text ? (
+                <span className="typing"><i /><i /><i /></span>
+              ) : (
+                <>
+                  {m.text}
+                  {m.from === "confide" && (
+                    <button className="bubble-speak" onClick={() => speak(m.text, lang)} title="Read aloud">🔊</button>
+                  )}
+                </>
               )}
             </div>
           ))}
-          {busy && <div className="bubble confide"><span className="typing"><i /><i /><i /></span></div>}
         </div>
         <div className="ph-suggest">
           {SUGGEST.map((s) => <button key={s} className="chip" onClick={() => send(s)} disabled={busy}>{s}</button>)}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 // The living patient knowledge graph. A lightweight force simulation (no external
 // libs) lays out fact nodes around a central patient node. Conflict / contradiction
@@ -34,7 +34,7 @@ export default function GraphView({ snapshot, height = 460, onSelect }) {
   // Expanded: compute directly from the viewport so the fixed-width SVG can
   // never exceed the screen (measuring clientWidth mid-transition caused a
   // stale/oversized width and a horizontal scrollbar).
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const measure = () => {
@@ -44,7 +44,8 @@ export default function GraphView({ snapshot, height = 460, onSelect }) {
           h: Math.round(window.innerHeight * 0.8),
         });
       } else {
-        setSize({ w: el.clientWidth, h: height });
+        const w = el.clientWidth;
+        if (w > 0) setSize({ w, h: height });
       }
     };
     const ro = new ResizeObserver(measure);

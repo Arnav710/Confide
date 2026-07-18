@@ -23,6 +23,27 @@ async function req(path, { method = "GET", body, form } = {}) {
   return res.json();
 }
 
+// Streams a text/plain response, invoking onToken(fullTextSoFar) as chunks arrive.
+// Returns the complete text when the stream ends.
+async function streamReq(path, body, onToken) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok || !res.body) throw new Error(res.statusText);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let full = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    full += decoder.decode(value, { stream: true });
+    onToken?.(full);
+  }
+  return full;
+}
+
 export const api = {
   status: () => req("/api/status"),
   gemmaLogs: (limit = 20) => req(`/api/gemma/logs?limit=${limit}`),
@@ -121,6 +142,8 @@ export const api = {
     req(`/api/patient/${id}/language`, { method: "POST", body: { language } }),
   patientChat: (id, message, language) =>
     req("/api/patient/chat", { method: "POST", body: { patient_id: id, message, language } }),
+  patientChatStream: (id, message, onToken, language) =>
+    streamReq("/api/patient/chat/stream", { patient_id: id, message, language }, onToken),
   patientDebrief: (id, language) =>
     req(`/api/patient/debrief/${id}${language ? `?language=${language}` : ""}`, { method: "POST" }),
   patientHistory: (id) => req(`/api/patient/history?patient_id=${id}`),

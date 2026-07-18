@@ -13,10 +13,11 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from core import graph, guardian, repo, vision
-from core.llm import ask, ask_json
+from core.llm import ask, ask_json, ask_stream
 
 router = APIRouter(prefix="/api/patient", tags=["patient"])
 
@@ -82,6 +83,30 @@ def chat(body: ChatRequest):
     )
     repo.log_qa(body.patient_id, "patient_chat", body.message, answer, asked_by="patient")
     return {"message": body.message, "answer": answer, "language": lang}
+
+
+@router.post("/chat/stream")
+def chat_stream(body: ChatRequest):
+    """Same as /chat but streams the answer token-by-token so the UI renders it live,
+    in the patient's language. Logs the full answer once the stream finishes."""
+    p = repo.get_patient(body.patient_id)
+    if not p:
+        raise HTTPException(404, "Patient not found")
+    lang = _resp_lang(p, body.language)
+    ctx = graph.context_text(body.patient_id)
+    prompt = (
+        f"The patient's recorded care:\n{ctx}\n\nThe patient asks: {body.message}\n\n"
+        f"Answer them warmly and plainly, writing ENTIRELY in {lang}:"
+    )
+
+    def gen():
+        parts: list[str] = []
+        for piece in ask_stream(prompt, system=CHAT_SYSTEM):
+            parts.append(piece)
+            yield piece
+        repo.log_qa(body.patient_id, "patient_chat", body.message, "".join(parts), asked_by="patient")
+
+    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
 
 
 DEBRIEF_SYSTEM = (

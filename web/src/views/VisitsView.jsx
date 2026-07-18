@@ -254,11 +254,16 @@ function FeedItem({ item }) {
         )}
       </div>
       <style>{`
-        .tl-item { display:flex; gap:12px; padding:12px 0; border-top:1px solid var(--line-soft); }
-        .tl-item:first-child { border-top:none; padding-top:0; }
-        .tl-dot { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; font-size:14px;
-          flex-shrink:0; background:var(--panel-hi); }
-        .tl-body { flex:1; min-width:0; }
+        .tl-item { display:flex; gap:14px; padding:0 0 18px; position:relative; }
+        .tl-item:last-child { padding-bottom:0; }
+        /* Spine connecting the dots into one continuous timeline. */
+        .tl-item:not(:last-child)::before { content:""; position:absolute; left:15px; top:34px; bottom:0;
+          width:2px; background:linear-gradient(var(--line), var(--line-soft)); }
+        .tl-dot { width:32px; height:32px; border-radius:10px; display:grid; place-items:center; font-size:15px;
+          flex-shrink:0; background:var(--panel-hi); border:1px solid var(--line); position:relative; z-index:1; }
+        .tl-body { flex:1; min-width:0; background:var(--panel-2); border:1px solid var(--line-soft);
+          border-radius:10px; padding:11px 13px; transition:border-color .15s; }
+        .tl-body:hover { border-color:var(--teal-dim); }
         .tl-more { font-size:11px; color:var(--text-mute); margin-top:6px; }
         .tl-more:hover { color:var(--teal); }
       `}</style>

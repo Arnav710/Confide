@@ -32,7 +32,7 @@ export default function Landing() {
           <Link to="/doctor/login" className="tab-card">
             <div className="tab-icon">🩺</div>
             <div>
-              <div className="tab-title">I'm a clinician</div>
+              <div className="tab-title">I'm a healthcare practitioner</div>
               <div className="tab-sub">Round, capture, and watch the Guardian work</div>
             </div>
             <span className="tab-go">→</span>
@@ -48,7 +48,7 @@ export default function Landing() {
         </div>
 
         <div className="demo-hint muted fade-up" style={{ animationDelay: "0.25s" }}>
-          Demo logins — clinician <code>doctor / confide</code> · patient <code>maria / confide</code>
+          Demo logins — healthcare practitioner <code>doctor / confide</code> · patient <code>maria / confide</code>
         </div>
       </div>
 
