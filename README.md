@@ -17,6 +17,7 @@ On-device isn't a marketing checkbox here — it's load-bearing for the use case
 We're careful *not* to claim "clinical AI legally can't use the cloud" — HIPAA-compliant cloud scribes exist. The honest claim is narrower and stronger: on-device eliminates the breach and connectivity problems entirely, for the most sensitive audio in medicine.
 ---
 ## The patient journey
+
 Confide follows one patient through a stay. Each moment is a feature; each feature reuses the same underlying primitives.
 **Admission.** A patient arrives, often scared, sometimes with limited English. Confide runs real-time, two-way translation between patient and staff — no interpreter phone line, no audio leaving the building, no ten-minute wait for a callback.
 **Consent.** Before a procedure, the patient is handed a dense consent form. Confide photographs it, explains it in plain language, and logs the actual questions the patient asked — a real record they understood the procedure, not just a signature on a page. Patients routinely sign consent they don't understand; this creates evidence of genuine informed consent.
@@ -24,6 +25,7 @@ Confide follows one patient through a stay. Each moment is a feature; each featu
 **Bedside.** For a disoriented or elderly inpatient, a lightweight reality-orientation runs at the bedside: what day it is, why they're here, what happens next. Hospital delirium from disorientation is a well-documented complication, especially post-surgery and in older patients.
 **Shift handoff.** Instead of a rushed verbal recap between nurses, Confide auto-generates a structured SBAR-style handoff from the day's notes, so nothing is lost between shifts.
 **Discharge.** The patient gets grounded Q&A on their own discharge papers ("what does it say about when I can shower?"), red-flag symptoms matched against what's actually listed as urgent, and follow-up reminders scheduled. This ties directly to readmission rates, which CMS penalizes hospitals for — a concrete, fundable reason a hospital would adopt it.
+
 ---
 ## Features
 Every feature is built on the same three primitives, so the list is deep, not scattered. Features are grouped by build priority.
