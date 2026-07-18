@@ -3,6 +3,7 @@
 Confide is an on-device AI companion for the *entire* hospital stay — from admission to discharge. Almost every touchpoint in a stay involves a sensitive conversation or document that shouldn't be routed through the cloud: a scared patient with limited English, a consent form nobody reads, a physician dictating orders, a rushed nurse handoff, a discharge sheet full of instructions. Confide handles all of it locally, on a single device, with nothing leaving the building.
 It runs on **Gemma 4** and keeps its core intelligence entirely offline — no cloud inference, no third-party processors, no audio or images sent anywhere.
 `Gemma 4` · `On-device` · `Privacy-first` · `Offline-capable`
+
 ---
 ## The problem
 Hospitals leak sensitive information at the seams. Interpreter phone lines route private conversations through a third party. Consent is a signature on a form the patient didn't understand. Verbal handoffs drop details between shifts. Discharge instructions are read once and forgotten, and preventable readmissions get the hospital penalized.
