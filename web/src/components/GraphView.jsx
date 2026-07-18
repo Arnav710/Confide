@@ -25,18 +25,47 @@ export default function GraphView({ snapshot, height = 460, onSelect }) {
   const wrapRef = useRef(null);
   const [size, setSize] = useState({ w: 800, h: height });
   const [sel, setSel] = useState(null);
+  const [expanded, setExpanded] = useState(false);
   const simRef = useRef({ nodes: [], edges: [] });
   const [, force] = useState(0);
   const rafRef = useRef(null);
 
+  // Size the canvas. Collapsed: track the column width via ResizeObserver.
+  // Expanded: compute directly from the viewport so the fixed-width SVG can
+  // never exceed the screen (measuring clientWidth mid-transition caused a
+  // stale/oversized width and a horizontal scrollbar).
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: height }));
+    const measure = () => {
+      if (expanded) {
+        setSize({
+          w: Math.min(1160, Math.round(window.innerWidth * 0.9)),
+          h: Math.round(window.innerHeight * 0.8),
+        });
+      } else {
+        setSize({ w: el.clientWidth, h: height });
+      }
+    };
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    setSize({ w: el.clientWidth, h: height });
-    return () => ro.disconnect();
-  }, [height]);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, [expanded, height]);
+
+  // While the overlay is open: close on ESC and lock body scroll.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e) => { if (e.key === "Escape") setExpanded(false); };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [expanded]);
 
   // Which node ids are implicated in an active alert (for the red glow).
   const alertNodeIds = useMemo(() => {
@@ -164,8 +193,20 @@ export default function GraphView({ snapshot, height = 460, onSelect }) {
   }
 
   return (
-    <div ref={wrapRef} style={{ position: "relative", width: "100%" }}>
-      <svg width={size.w} height={size.h} style={{ display: "block" }}>
+    <div className={expanded ? "gv-overlay" : undefined} onClick={expanded ? () => setExpanded(false) : undefined}>
+      <div
+        ref={wrapRef}
+        onClick={expanded ? (e) => e.stopPropagation() : undefined}
+        style={{ position: "relative", width: expanded ? size.w : "100%", maxWidth: "100%" }}
+      >
+        <button
+          className="gv-expand"
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? "Collapse graph" : "Expand graph"}
+        >
+          {expanded ? "✕ Close" : "⤢ Expand"}
+        </button>
+        <svg width={size.w} height={size.h} style={{ display: "block" }}>
         <defs>
           <radialGradient id="glowTeal" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="rgba(47,230,200,0.35)" />
@@ -236,7 +277,15 @@ export default function GraphView({ snapshot, height = 460, onSelect }) {
           );
         })}
       </svg>
+      </div>
       <style>{`
+        .gv-overlay { position: fixed; inset: 0; z-index: 90; background: rgba(6,10,20,0.92);
+          box-sizing: border-box; padding: 24px; overflow: hidden;
+          display: flex; align-items: center; justify-content: center; }
+        .gv-expand { position: absolute; top: 8px; right: 8px; z-index: 3; font-size: 12px;
+          padding: 5px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line);
+          color: var(--text-dim); cursor: pointer; }
+        .gv-expand:hover { border-color: var(--teal-dim); color: var(--text); }
         @keyframes dash { to { stroke-dashoffset: -18; } }
         @keyframes pulseRing { 0% { transform: scale(0.85); opacity: 0.9; } 100% { transform: scale(1.3); opacity: 0; } }
       `}</style>

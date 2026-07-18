@@ -88,15 +88,15 @@ def discharge_patient(patient_id: int) -> dict | None:
 # --- encounters --------------------------------------------------------------
 
 def create_encounter(patient_id, staff_id, kind, raw_transcript=None, chief_complaint=None,
-                     summary=None, medications=None, follow_ups=None) -> dict:
+                     summary=None, medications=None, follow_ups=None, emotional_tone=None) -> dict:
     with db.connect() as conn:
         cur = conn.execute(
             """INSERT INTO encounters
                (patient_id, staff_id, kind, raw_transcript, chief_complaint, summary,
-                medications, follow_ups, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                medications, follow_ups, emotional_tone, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (patient_id, staff_id, kind, raw_transcript, chief_complaint, summary,
-             json.dumps(medications or []), json.dumps(follow_ups or []), db.now()),
+             json.dumps(medications or []), json.dumps(follow_ups or []), emotional_tone, db.now()),
         )
         return _enc(db.row_to_dict(conn.execute("SELECT * FROM encounters WHERE id=?", (cur.lastrowid,)).fetchone()))
 

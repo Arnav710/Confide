@@ -4,13 +4,6 @@ import RecordButton from "../components/RecordButton.jsx";
 import GuardianAlert from "../components/GuardianAlert.jsx";
 import GraphView from "../components/GraphView.jsx";
 
-// Scripted demo lines — one tap to reproduce each Guardian beat every time.
-const SCRIPTS = [
-  { label: "Contradiction + allergy + order", text: "Patient tells me she is not on any blood thinners. I'd like to start her on amoxicillin for the infection. Also please recheck her troponin in two hours." },
-  { label: "Interaction (warfarin + NSAID)", text: "Let's add ibuprofen for her pain and continue the warfarin." },
-  { label: "Plain round note", text: "Patient resting comfortably, pain down to 3 out of 10. Continue current plan, reassess in the morning." },
-];
-
 export default function ScribeView({ pid, staff, snapshot, refresh }) {
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -45,16 +38,6 @@ export default function ScribeView({ pid, staff, snapshot, refresh }) {
         <div className="col" style={{ gap: 16 }}>
           <div className="card" style={{ padding: 18 }}>
             <RecordButton onText={capture} cta="Capture & analyze" placeholder="Dictate the round, or type what was said…" />
-            <div className="sep" />
-            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>SCRIPTED DEMO LINES</div>
-            <div className="col" style={{ gap: 8 }}>
-              {SCRIPTS.map((s) => (
-                <button key={s.label} className="script" onClick={() => capture(s.text)} disabled={busy}>
-                  <b style={{ fontSize: 13 }}>{s.label}</b>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{s.text}</div>
-                </button>
-              ))}
-            </div>
           </div>
 
           {busy && (
@@ -69,7 +52,10 @@ export default function ScribeView({ pid, staff, snapshot, refresh }) {
 
           {result && (
             <div className="card fade-up" style={{ padding: 18 }}>
-              <b>Structured note</b>
+              <div className="row between">
+                <b>Structured note</b>
+                <ToneChip tone={result.note.emotional_tone} />
+              </div>
               <div className="note-block" style={{ marginTop: 12 }}>
                 <Field label="Chief complaint" value={result.note.chief_complaint} />
                 <Field label="Summary" value={result.note.summary} />
@@ -99,23 +85,39 @@ export default function ScribeView({ pid, staff, snapshot, refresh }) {
           <div className="card" style={{ padding: 16, overflow: "hidden" }}>
             <div className="row between" style={{ marginBottom: 6 }}>
               <b style={{ fontSize: 14 }}>Graph</b>
-              <span className="muted" style={{ fontSize: 12 }}>{(snapshot.nodes || []).length} facts</span>
+              <span className="muted" style={{ fontSize: 12 }}>{(snapshot.nodes || []).length} facts · ⤢ to expand</span>
             </div>
-            <GraphView snapshot={snapshot} height={320} />
+            <GraphView snapshot={snapshot} height={360} />
           </div>
         </div>
       </div>
 
       <style>{`
         .sc-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
-        .script { text-align:left; padding:12px 14px; background:var(--bg-soft); border:1px solid var(--line);
-          border-radius:10px; transition:all 0.13s; }
-        .script:hover { border-color:var(--teal-dim); }
         .thinking { display:flex; gap:14px; align-items:center; border-color:var(--teal-dim); }
         .note-block { display:flex; flex-direction:column; gap:12px; }
         @media (max-width:960px){ .sc-grid{grid-template-columns:1fr;} }
       `}</style>
     </div>
+  );
+}
+
+// Gemma-inferred patient affect for the round. Color-coded so a distressed
+// patient reads at a glance without changing the note layout.
+const TONE_COLORS = {
+  anxious: "#ffb84d", distressed: "#ff5a6e", "in pain": "#ff5a6e",
+  frustrated: "#ff9db0", calm: "#3ee08a", reassured: "#3ee08a", neutral: "#8a97bd",
+};
+
+export function ToneChip({ tone }) {
+  if (!tone) return null;
+  const c = TONE_COLORS[String(tone).toLowerCase()] || "#8a97bd";
+  return (
+    <span className="row" style={{ gap: 6, fontSize: 12, padding: "4px 10px", borderRadius: 999,
+      background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
+      <span style={{ width: 7, height: 7, borderRadius: 999, background: c, display: "inline-block" }} />
+      {tone}
+    </span>
   );
 }
 

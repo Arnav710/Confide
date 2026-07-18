@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS encounters (
     summary TEXT,
     medications TEXT,                   -- JSON array (structured note view)
     follow_ups TEXT,                    -- JSON array
+    emotional_tone TEXT,                -- Gemma-inferred patient affect for this round
     created_at TEXT NOT NULL
 );
 

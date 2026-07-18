@@ -208,7 +208,8 @@ COMBINED_PROMPT_TEMPLATE = """You are the language layer of a clinical assistant
     "chief_complaint": short string or null,
     "summary": 1-2 sentence plain summary,
     "medications": [strings, meds mentioned/ordered],
-    "follow_ups": [strings, orders/follow-ups e.g. "recheck labs in 4 hours"]
+    "follow_ups": [strings, orders/follow-ups e.g. "recheck labs in 4 hours"],
+    "emotional_tone": ONE word for the patient's emotional state from their words/voice cues, e.g. "anxious"|"calm"|"distressed"|"frustrated"|"reassured"|"in pain"|"neutral", or null
   }},
   "facts": [
     {{
@@ -243,6 +244,7 @@ def structure_and_extract(transcript: str) -> tuple[dict, list[dict]]:
         "summary": note.get("summary"),
         "medications": note.get("medications", []),
         "follow_ups": note.get("follow_ups", []),
+        "emotional_tone": note.get("emotional_tone"),
     }
     return note, _normalize_facts(facts)
 

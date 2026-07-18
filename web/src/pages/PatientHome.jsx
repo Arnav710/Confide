@@ -21,7 +21,8 @@ export default function PatientHome() {
   useEffect(() => {
     if (!me) return;
     api.patientReminders(me.patient_id).then(setReminders).catch(() => {});
-  }, [me]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.patient_id]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });

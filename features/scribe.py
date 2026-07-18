@@ -73,6 +73,7 @@ def capture(body: CaptureRequest):
         summary=structured["summary"],
         medications=structured["medications"],
         follow_ups=structured["follow_ups"],
+        emotional_tone=structured.get("emotional_tone"),
     )
 
     new_nodes = graph.ingest_facts(body.patient_id, facts, source_kind=body.kind, encounter_id=encounter["id"])

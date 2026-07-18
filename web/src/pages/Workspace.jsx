@@ -5,6 +5,7 @@ import { session } from "../lib/session.js";
 import NetworkPill from "../components/NetworkPill.jsx";
 import Overview from "../views/Overview.jsx";
 import ScribeView from "../views/ScribeView.jsx";
+import VisitsView from "../views/VisitsView.jsx";
 import ConsentView from "../views/ConsentView.jsx";
 import DischargeView from "../views/DischargeView.jsx";
 import HandoffView from "../views/HandoffView.jsx";
@@ -12,6 +13,7 @@ import HandoffView from "../views/HandoffView.jsx";
 const NAV = [
   { key: "overview", label: "Overview", icon: "◈", hint: "Graph & Guardian" },
   { key: "scribe", label: "Scribe", icon: "🎧", hint: "Capture a round" },
+  { key: "visits", label: "Visits", icon: "🗂", hint: "Every captured round" },
   { key: "consent", label: "Consent", icon: "📋", hint: "Explain a form" },
   { key: "discharge", label: "Discharge", icon: "🏠", hint: "Going-home plan" },
   { key: "handoff", label: "Handoff", icon: "🔀", hint: "SBAR & catch-up" },
@@ -78,6 +80,7 @@ export default function Workspace() {
       <main className="ws-main">
         {tab === "overview" && <Overview {...shared} />}
         {tab === "scribe" && <ScribeView {...shared} />}
+        {tab === "visits" && <VisitsView {...shared} />}
         {tab === "consent" && <ConsentView {...shared} />}
         {tab === "discharge" && <DischargeView {...shared} />}
         {tab === "handoff" && <HandoffView {...shared} />}
