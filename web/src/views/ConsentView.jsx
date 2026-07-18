@@ -66,7 +66,7 @@ export default function ConsentView({ pid, staff }) {
       </p>
 
       <div className="two-col">
-        <div className="card" style={{ padding: 18 }}>
+        <div className="card cn-form" style={{ padding: 18 }}>
           <div className="row between" style={{ marginBottom: 10 }}>
             <b style={{ fontSize: 14 }}>Form text</b>
             <label className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12 }}>
@@ -75,7 +75,7 @@ export default function ConsentView({ pid, staff }) {
                 onChange={(e) => e.target.files[0] && uploadImg(e.target.files[0])} />
             </label>
           </div>
-          <textarea className="textarea" style={{ minHeight: 220, fontFamily: "var(--mono)", fontSize: 12 }}
+          <textarea className="textarea cn-text" style={{ fontFamily: "var(--mono)", fontSize: 12 }}
             value={ocr} onChange={(e) => setOcr(e.target.value)} />
           <button className="btn btn-primary" style={{ marginTop: 12, width: "100%", justifyContent: "center" }}
             onClick={ingest} disabled={busy}>
@@ -130,6 +130,10 @@ export default function ConsentView({ pid, staff }) {
 
       <style>{`
         .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
+        /* A substantial form pane so the reading side has presence before an explanation exists. */
+        .cn-form { min-height:440px; display:flex; flex-direction:column; }
+        .cn-text { flex:1; min-height:300px; resize:vertical; }
+        @media (max-width:960px){ .cn-form{min-height:0;} .cn-text{min-height:220px;} }
         .chip { font-size:12px; padding:6px 11px; border-radius:999px; background:var(--panel-2);
           border:1px solid var(--line); color:var(--text-dim); text-align:left; }
         .chip:hover { border-color:var(--teal-dim); color:var(--text); }

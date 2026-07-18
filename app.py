@@ -25,6 +25,11 @@ app = FastAPI(title="Confide")
 def _startup():
     db.init_db()
     _ensure_seed()
+    # Warm Gemma in the background so the first demo call isn't a cold load.
+    import threading
+
+    from core.llm import warmup
+    threading.Thread(target=warmup, daemon=True).start()
 
 
 # --- status ------------------------------------------------------------------
@@ -59,8 +64,13 @@ def status():
 def gemma_logs(limit: int = 20):
     """Recent on-device Gemma calls (prompt/output previews + latency) for the
     live console. Proves inference is happening locally during the demo."""
-    from core.llm import recent_calls
-    return {"model": OLLAMA_MODEL, "calls": recent_calls(limit)}
+    from core.llm import model_status, recent_calls, session_stats
+    return {
+        "model": OLLAMA_MODEL,
+        "calls": recent_calls(limit),
+        "session": session_stats(),
+        "resident": model_status(),
+    }
 
 
 # --- auth --------------------------------------------------------------------

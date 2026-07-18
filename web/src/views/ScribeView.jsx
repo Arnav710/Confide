@@ -36,15 +36,15 @@ export default function ScribeView({ pid, staff, snapshot, refresh }) {
 
       <div className="sc-grid">
         <div className="col" style={{ gap: 16 }}>
-          <div className="card" style={{ padding: 18 }}>
-            <RecordButton onText={capture} cta="Capture & analyze" placeholder="Dictate the round, or type what was said…" />
+          <div className="card sc-capture" style={{ padding: 18 }}>
+            <RecordButton grow onText={capture} cta="Capture & analyze" placeholder="Dictate the round, or type what was said…" />
           </div>
 
           {busy && (
             <div className="card thinking" style={{ padding: 20 }}>
               <span className="spinner" />
               <div>
-                <b>Confide is listening…</b>
+                <b>Confide is thinking…</b>
                 <div className="muted" style={{ fontSize: 13 }}>Structuring the note · extracting facts · running the Guardian</div>
               </div>
             </div>
@@ -68,9 +68,6 @@ export default function ScribeView({ pid, staff, snapshot, refresh }) {
               </div>
             </div>
           )}
-        </div>
-
-        <div className="col" style={{ gap: 16 }}>
           {liveAlerts.length > 0 && (
             <div className="col" style={{ gap: 10 }}>
               <div className="row" style={{ gap: 8 }}>
@@ -82,21 +79,29 @@ export default function ScribeView({ pid, staff, snapshot, refresh }) {
               ))}
             </div>
           )}
-          <div className="card" style={{ padding: 16, overflow: "hidden" }}>
-            <div className="row between" style={{ marginBottom: 6 }}>
-              <b style={{ fontSize: 14 }}>Graph</b>
-              <span className="muted" style={{ fontSize: 12 }}>{(snapshot.nodes || []).length} facts · ⤢ to expand</span>
+        </div>
+
+        <div className="card graph-card">
+          <div className="row between" style={{ marginBottom: 8 }}>
+            <div className="row" style={{ gap: 8 }}>
+              <span style={{ color: "var(--teal)" }}>◈</span>
+              <b style={{ fontSize: 14 }}>Live patient graph</b>
             </div>
-            <GraphView snapshot={snapshot} height={360} />
+            <span className="muted" style={{ fontSize: 12 }}>{(snapshot.nodes || []).length} facts · ⤢ to expand</span>
           </div>
+          <GraphView snapshot={snapshot} height={520} />
         </div>
       </div>
 
       <style>{`
-        .sc-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
+        .sc-grid { display:grid; grid-template-columns:minmax(320px, 400px) 1fr; gap:16px; align-items:start; }
+        /* Match the dictation card to the graph's height so the two sides balance. */
+        .sc-capture { min-height:520px; display:flex; flex-direction:column; }
         .thinking { display:flex; gap:14px; align-items:center; border-color:var(--teal-dim); }
         .note-block { display:flex; flex-direction:column; gap:12px; }
-        @media (max-width:960px){ .sc-grid{grid-template-columns:1fr;} }
+        .graph-card { padding:16px; overflow:hidden; position:sticky; top:24px; }
+        @media (max-width:1040px){ .sc-grid{grid-template-columns:1fr;} .graph-card{position:static;}
+          .sc-capture{min-height:280px;} }
       `}</style>
     </div>
   );

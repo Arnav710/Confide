@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { session } from "../lib/session.js";
 import NetworkPill from "../components/NetworkPill.jsx";
+import GemmaConsole from "../components/GemmaConsole.jsx";
 
 export default function PatientHome() {
   const nav = useNavigate();
@@ -13,7 +14,7 @@ export default function PatientHome() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [reminders, setReminders] = useState([]);
-  const [orientation, setOrientation] = useState(null);
+  const [visits, setVisits] = useState([]);
   const [debrief, setDebrief] = useState(null);
   const scrollRef = useRef(null);
   const audioRef = useRef(null);
@@ -21,6 +22,7 @@ export default function PatientHome() {
   useEffect(() => {
     if (!me) return;
     api.patientReminders(me.patient_id).then(setReminders).catch(() => {});
+    api.scribeEncounters(me.patient_id).then((v) => setVisits(v || [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me?.patient_id]);
 
@@ -42,32 +44,24 @@ export default function PatientHome() {
   async function send(text) {
     const msg = text ?? input;
     if (!msg.trim()) return;
-    setMessages((m) => [...m, { from: "me", text: msg }]);
+    // Add the user's message plus an empty Confide bubble to stream tokens into.
+    setMessages((m) => [...m, { from: "me", text: msg }, { from: "confide", text: "" }]);
     setInput("");
     setBusy(true);
+    const fill = (t) =>
+      setMessages((m) => {
+        const copy = [...m];
+        copy[copy.length - 1] = { from: "confide", text: t };
+        return copy;
+      });
     try {
-      const res = await api.patientChat(me.patient_id, msg);
-      setMessages((m) => [...m, { from: "confide", text: res.answer }]);
-      speak(res.answer);
+      const full = await api.patientChatStream(me.patient_id, msg, fill);
+      speak(full);
     } catch (e) {
-      setMessages((m) => [...m, { from: "confide", text: "I'm having trouble right now — please ask your nurse. (" + e.message + ")" }]);
+      fill("I'm having trouble right now — please ask your nurse. (" + e.message + ")");
     } finally {
       setBusy(false);
     }
-  }
-
-  async function orient() {
-    setBusy(true);
-    try {
-      const res = await api.orient(me.patient_id, null);
-      setOrientation(res);
-      if (res.audio_url && audioRef.current) {
-        audioRef.current.src = res.audio_url;
-        audioRef.current.play().catch(() => speak(res.script_text));
-      } else {
-        speak(res.script_text);
-      }
-    } catch (e) { alert(e.message); } finally { setBusy(false); }
   }
 
   async function getDebrief() {
@@ -77,6 +71,12 @@ export default function PatientHome() {
   }
 
   const SUGGEST = ["What's happening to me?", "Why am I here?", "What are my medications for?", "Is it serious?"];
+
+  function fmtVisit(iso) {
+    try {
+      return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch { return iso; }
+  }
 
   return (
     <div className="ph">
@@ -102,9 +102,10 @@ export default function PatientHome() {
           </div>
           <div className="ph-messages" ref={scrollRef}>
             {messages.map((m, i) => (
-              <div key={i} className={`bubble ${m.from}`}>{m.text}</div>
+              <div key={i} className={`bubble ${m.from}`}>
+                {m.text || (m.from === "confide" ? <span className="typing"><i /><i /><i /></span> : "")}
+              </div>
             ))}
-            {busy && <div className="bubble confide"><span className="typing"><i /><i /><i /></span></div>}
           </div>
           <div className="ph-suggest">
             {SUGGEST.map((s) => <button key={s} className="chip" onClick={() => send(s)} disabled={busy}>{s}</button>)}
@@ -131,12 +132,25 @@ export default function PatientHome() {
           </div>
 
           <div className="card" style={{ padding: 18 }}>
-            <div className="row" style={{ gap: 8, marginBottom: 8 }}><span style={{ fontSize: 16 }}>🌙</span><b>Feeling disoriented?</b></div>
-            <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>Confide can gently remind you where you are and what's happening.</p>
-            <button className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={orient} disabled={busy}>
-              🔊 Reorient me
-            </button>
-            {orientation && <div className="soft-note fade-up">{orientation.script_text}</div>}
+            <div className="row" style={{ gap: 8, marginBottom: 12 }}><span style={{ fontSize: 16 }}>🗓</span><b>My visits</b></div>
+            {visits.length === 0 && <div className="muted" style={{ fontSize: 13 }}>No visits recorded yet. They'll appear here after your care team sees you.</div>}
+            <div className="ph-timeline">
+              {visits.map((v) => (
+                <div key={v.id} className="ph-visit">
+                  <div className="ph-visit-dot" />
+                  <div style={{ flex: 1 }}>
+                    <div className="row between" style={{ gap: 8 }}>
+                      <b style={{ fontSize: 14 }}>{v.chief_complaint || "Check-in"}</b>
+                      <span className="muted" style={{ fontSize: 11, whiteSpace: "nowrap" }}>{fmtVisit(v.created_at)}</span>
+                    </div>
+                    {v.summary && <div className="muted" style={{ fontSize: 13, marginTop: 3, lineHeight: 1.5 }}>{v.summary}</div>}
+                    {v.medications && v.medications.length > 0 && (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 5 }}>💊 {v.medications.join(", ")}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="card" style={{ padding: 18 }}>
@@ -150,6 +164,7 @@ export default function PatientHome() {
         </div>
       </div>
       <audio ref={audioRef} style={{ display: "none" }} />
+      <GemmaConsole />
 
       <style>{`
         .ph { min-height:100vh; }
@@ -180,6 +195,11 @@ export default function PatientHome() {
         .chip:hover { border-color:var(--teal-dim); color:var(--text); }
         .ph-input { display:flex; gap:8px; padding:14px 18px; border-top:1px solid var(--line); }
         .reminder { padding:10px 12px; background:var(--bg-soft); border:1px solid var(--line-soft); border-radius:8px; }
+        .ph-timeline { display:flex; flex-direction:column; gap:14px; max-height:340px; overflow-y:auto; padding-right:4px; }
+        .ph-visit { display:flex; gap:12px; position:relative; }
+        .ph-visit:not(:last-child)::before { content:""; position:absolute; left:4px; top:16px; bottom:-14px; width:1px; background:var(--line); }
+        .ph-visit-dot { width:9px; height:9px; border-radius:50%; margin-top:5px; flex:none;
+          background:var(--teal); box-shadow:0 0 8px var(--teal-glow); }
         .soft-note { margin-top:12px; background:rgba(47,230,200,0.06); border:1px solid var(--teal-dim);
           border-radius:10px; padding:12px 14px; font-size:14px; line-height:1.6; }
         @media (max-width:900px){ .ph-body{grid-template-columns:1fr;} .ph-chat{height:60vh;} }

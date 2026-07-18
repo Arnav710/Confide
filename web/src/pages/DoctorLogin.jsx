@@ -35,7 +35,7 @@ export default function DoctorLogin() {
   }
 
   return (
-    <AuthShell icon="🩺" title="Clinician sign-in" subtitle="Round, capture, and watch the Guardian work.">
+    <AuthShell icon="🩺" title="Healthcare practitioner sign-in" subtitle="Round, capture, and watch the Guardian work.">
       <form onSubmit={submit}>
         {mode === "register" && (
           <label className="field">
@@ -59,7 +59,7 @@ export default function DoctorLogin() {
       <div className="row between" style={{ marginTop: 16, fontSize: 13 }}>
         <button className="btn-ghost" style={{ background: "none", border: "none", color: "var(--teal)" }}
           onClick={() => setMode(mode === "login" ? "register" : "login")}>
-          {mode === "login" ? "Create a clinician account" : "Have an account? Sign in"}
+          {mode === "login" ? "Create a healthcare practitioner account" : "Have an account? Sign in"}
         </button>
         <Link to="/" className="muted">← Home</Link>
       </div>
