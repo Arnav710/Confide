@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import time
+from collections import deque
 from typing import Any
 
 import ollama
@@ -19,6 +20,32 @@ import ollama
 from core.config import OLLAMA_HOST, OLLAMA_MODEL
 
 _client = ollama.Client(host=OLLAMA_HOST)
+
+# In-memory ring buffer of recent Gemma calls, surfaced in the UI's live console
+# so the demo can *show* on-device inference happening (prompt -> JSON -> timing).
+_CALL_LOG: deque = deque(maxlen=40)
+_call_seq = 0
+
+
+def _record(kind: str, prompt: str, output: str, duration: float) -> None:
+    global _call_seq
+    _call_seq += 1
+    _CALL_LOG.append({
+        "id": _call_seq,
+        "ts": time.time(),
+        "kind": kind,                       # 'json' | 'chat' | 'vision'
+        "model": OLLAMA_MODEL,
+        "prompt_preview": (prompt or "")[:600],
+        "output_preview": (output or "")[:600],
+        "prompt_chars": len(prompt or ""),
+        "output_chars": len(output or ""),
+        "duration_ms": round(duration * 1000),
+    })
+
+
+def recent_calls(limit: int = 20) -> list[dict]:
+    """Newest-first slice of the call log for the live console."""
+    return list(reversed(list(_CALL_LOG)))[:limit]
 
 log = logging.getLogger("confide.llm")
 if not log.handlers:
@@ -57,7 +84,9 @@ def ask(prompt: str, system: str | None = None, temperature: float = 0.2,
     t0 = time.time()
     resp = _client.chat(**kwargs)
     text = resp["message"]["content"].strip()
-    _dump(f"OUTPUT ({time.time() - t0:.1f}s)", text)
+    dt = time.time() - t0
+    _dump(f"OUTPUT ({dt:.1f}s)", text)
+    _record("json" if fmt else "chat", prompt, text, dt)
     return text
 
 
@@ -73,7 +102,9 @@ def ask_vision(prompt: str, image_path: str, system: str | None = None) -> str:
     t0 = time.time()
     resp = _client.chat(model=OLLAMA_MODEL, messages=messages, options={"temperature": 0.1})
     text = resp["message"]["content"].strip()
-    _dump(f"VISION OUTPUT ({time.time() - t0:.1f}s)", text)
+    dt = time.time() - t0
+    _dump(f"VISION OUTPUT ({dt:.1f}s)", text)
+    _record("vision", prompt, text, dt)
     return text
 
 

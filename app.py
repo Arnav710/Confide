@@ -55,6 +55,14 @@ def status():
     }
 
 
+@app.get("/api/gemma/logs")
+def gemma_logs(limit: int = 20):
+    """Recent on-device Gemma calls (prompt/output previews + latency) for the
+    live console. Proves inference is happening locally during the demo."""
+    from core.llm import recent_calls
+    return {"model": OLLAMA_MODEL, "calls": recent_calls(limit)}
+
+
 # --- auth --------------------------------------------------------------------
 
 class StaffLogin(BaseModel):

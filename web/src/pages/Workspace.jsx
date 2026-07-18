@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { session } from "../lib/session.js";
 import NetworkPill from "../components/NetworkPill.jsx";
+import GemmaConsole from "../components/GemmaConsole.jsx";
 import Overview from "../views/Overview.jsx";
 import ScribeView from "../views/ScribeView.jsx";
 import VisitsView from "../views/VisitsView.jsx";
@@ -85,6 +86,8 @@ export default function Workspace() {
         {tab === "discharge" && <DischargeView {...shared} />}
         {tab === "handoff" && <HandoffView {...shared} />}
       </main>
+
+      <GemmaConsole />
 
       <style>{`
         .ws { display:grid; grid-template-columns:260px 1fr; min-height:100vh; }

@@ -25,6 +25,7 @@ async function req(path, { method = "GET", body, form } = {}) {
 
 export const api = {
   status: () => req("/api/status"),
+  gemmaLogs: (limit = 20) => req(`/api/gemma/logs?limit=${limit}`),
 
   // auth
   staffLogin: (username, password) =>
