@@ -12,9 +12,15 @@ export default function Translate() {
   const [result, setResult] = useState(null);
   const [logs, setLogs] = useState([]);
 
+  // Target language = "translate the recording into this." It depends on direction, not
+  // just the patient: staff_to_patient should target the patient's language; the reverse
+  // should target English (the assumed staff/clinical language). Re-derive it whenever
+  // direction changes so flipping the dropdown doesn't leave a stale, backwards-looking
+  // target — still editable by hand afterward if that assumption is wrong.
   useEffect(() => {
-    if (patient) setTargetLang(patient.primary_language === "en" ? "Spanish" : "English");
-  }, [patient]);
+    if (!patient) return;
+    setTargetLang(direction === "staff_to_patient" ? patient.primary_language : "English");
+  }, [direction, patient]);
 
   async function loadLogs() {
     setLogs(await api.listTranslationLogs(patientId));
@@ -57,10 +63,15 @@ export default function Translate() {
             </select>
           </div>
           <div>
-            <label>Target language</label>
+            <label>Translate into</label>
             <input value={targetLang} onChange={(e) => setTargetLang(e.target.value)} />
           </div>
         </div>
+        <p className="muted">
+          {direction === "staff_to_patient"
+            ? `Recording will be treated as the staff member speaking, then translated into "${targetLang || "..."}" for the patient to hear.`
+            : `Recording will be treated as the patient speaking, then translated into "${targetLang || "..."}" for staff to hear.`}
+        </p>
         <RecordButton idleLabel="Record turn" recordingLabel="Stop" onStop={handleRecorded} />
         <div className="muted">{status}</div>
 
