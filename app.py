@@ -30,11 +30,12 @@ def _startup():
 # --- status ------------------------------------------------------------------
 
 def _network_reachable(timeout: float = 0.4) -> bool:
-    try:
-        socket.create_connection(("8.8.8.8", 53), timeout=timeout).close()
-        return True
-    except OSError:
-        return False
+    """Confide deliberately disables external runtime networking.
+
+    This reports the application's network mode without probing an external host.
+    Physical interface state is outside the app's trust boundary.
+    """
+    return False
 
 
 def _ollama_reachable() -> bool:
@@ -50,6 +51,7 @@ def _ollama_reachable() -> bool:
 def status():
     return {
         "network_reachable": _network_reachable(),
+        "network_mode": "disabled",
         "ollama_reachable": _ollama_reachable(),
         "model": OLLAMA_MODEL,
     }
