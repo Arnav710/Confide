@@ -1,0 +1,84 @@
+{
+  "generated_at": "2026-07-21T03:04:57+00:00",
+  "passed": true,
+  "agent": [
+    {
+      "id": "maria_spoken_round",
+      "passed": true,
+      "route": {
+        "passed": true,
+        "recall": 1.0,
+        "missing": [],
+        "actual": [
+          "extract_note_and_facts",
+          "ingest_facts",
+          "run_guardian",
+          "suggest_billing_codes",
+          "draft_handoff",
+          "draft_patient_summary"
+        ]
+      },
+      "critical_alert": false
+    },
+    {
+      "id": "maria_photographed_ketorolac",
+      "passed": true,
+      "route": {
+        "passed": true,
+        "recall": 1.0,
+        "missing": [],
+        "actual": [
+          "extract_note_and_facts",
+          "reconcile_medication",
+          "ingest_facts",
+          "run_guardian"
+        ]
+      },
+      "critical_alert": true
+    },
+    {
+      "id": "maria_typed_correction",
+      "passed": true,
+      "route": {
+        "passed": true,
+        "recall": 1.0,
+        "missing": [],
+        "actual": [
+          "extract_note_and_facts",
+          "ingest_facts"
+        ]
+      },
+      "critical_alert": false
+    }
+  ],
+  "coding": [
+    {
+      "id": "maria_round_codes",
+      "passed": true,
+      "score": {
+        "passed": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "missing": [],
+        "unexpected": [],
+        "unvalidated": []
+      },
+      "actual": [
+        {
+          "code": "I48.91",
+          "system": "ICD-10",
+          "label": "Atrial fibrillation, unspecified",
+          "evidence": "Atrial fibrillation",
+          "validated": true
+        },
+        {
+          "code": "99232",
+          "system": "CPT",
+          "label": "Subsequent hospital care, moderate complexity",
+          "evidence": "moderate decision complexity",
+          "validated": true
+        }
+      ]
+    }
+  ]
+}

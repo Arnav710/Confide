@@ -1,177 +1,185 @@
-# Doctor Offline
-**Private care, on your device.**
-Doctor Offline is an on-device AI companion for the *entire* hospital stay — from admission to discharge. Almost every touchpoint in a stay involves a sensitive conversation or document that shouldn't be routed through the cloud: a scared patient with limited English, a consent form nobody reads, a physician dictating orders, a rushed nurse handoff, a discharge sheet full of instructions. Doctor Offline handles all of it locally, on a single device, with nothing leaving the building.
-It runs on **Gemma 4** and keeps its core intelligence entirely offline — no cloud inference, no third-party processors, no audio or images sent anywhere.
-`Gemma 4` · `On-device` · `Privacy-first` · `Offline-capable`
+# Confide
 
----
-## The problem
-Hospitals leak sensitive information at the seams. Interpreter phone lines route private conversations through a third party. Consent is a signature on a form the patient didn't understand. Verbal handoffs drop details between shifts. Discharge instructions are read once and forgotten, and preventable readmissions get the hospital penalized.
-The common thread: these are all private, high-stakes exchanges, and the usual "add an AI feature" answer means shipping that data to the cloud. For clinical conversations, that's the one place it shouldn't go.
-Doctor Offline's answer is to move the intelligence to the bedside instead of moving the data to the cloud.
-## Why on-device
-On-device isn't a marketing checkbox here — it's load-bearing for the use case:
-- **It removes an entire risk surface.** No interception, no breach exposure, no third-party processor. The audio and images never leave the machine, so there's nothing in transit to compromise.
-- **It works with zero connectivity.** Rural clinics, ambulances, and disaster settings don't have reliable networks. Doctor Offline keeps working with the network switched off.
-- **It's verifiable.** Because every core operation runs on `localhost`, you can prove privacy trivially: disable the network and watch it keep working.
-We're careful *not* to claim "clinical AI legally can't use the cloud" — HIPAA-compliant cloud scribes exist. The honest claim is narrower and stronger: on-device eliminates the breach and connectivity problems entirely, for the most sensitive audio in medicine.
----
-## The patient journey
-Doctor Offline follows one patient through a stay. Each moment is a feature; each feature reuses the same underlying primitives.
-**Admission.** A patient arrives, often scared, sometimes with limited English. Doctor Offline runs real-time, two-way translation between patient and staff — no interpreter phone line, no audio leaving the building, no ten-minute wait for a callback.
-**Consent.** Before a procedure, the patient is handed a dense consent form. Doctor Offline photographs it, explains it in plain language, and logs the actual questions the patient asked — a real record they understood the procedure, not just a signature on a page. Patients routinely sign consent they don't understand; this creates evidence of genuine informed consent.
-**Rounds.** The physician dictates observations and orders. Doctor Offline turns the session into a structured note and, on the roadmap, extracts follow-up orders ("recheck labs in 4 hours," "increase fluids") into a local task queue cross-checked against the patient's known allergies and interactions.
-**Bedside.** For a disoriented or elderly inpatient, a lightweight reality-orientation runs at the bedside: what day it is, why they're here, what happens next. Hospital delirium from disorientation is a well-documented complication, especially post-surgery and in older patients.
-**Shift handoff.** Instead of a rushed verbal recap between nurses, Doctor Offline auto-generates a structured SBAR-style handoff from the day's notes, so nothing is lost between shifts.
-**Discharge.** The patient gets grounded Q&A on their own discharge papers ("what does it say about when I can shower?"), red-flag symptoms matched against what's actually listed as urgent, and follow-up reminders scheduled. This ties directly to readmission rates, which CMS penalizes hospitals for — a concrete, fundable reason a hospital would adopt it.
+**One bedside input. The downstream clinical paperwork, drafted locally.**
 
----
-## Features
-Every feature is built on the same three primitives, so the list is deep, not scattered. Features are grouped by build priority.
-### Core — build and demo live
-| Feature | Stage | What it does | Primitives |
-| --- | --- | --- | --- |
-| **Clinical Scribe** | Rounds | Turns a spoken session into a structured note (chief complaint, medications, follow-ups). The listening core everything else is built on. | Voice (STT) · Memory |
-| **Real-Time Translation** | Admission | Two-way, bedside translation between patient and staff, spoken aloud in both directions. | Voice (STT + TTS) |
-| **Consent Explainer** | Consent | Reads a consent form, explains it in plain language, and logs the patient's spoken questions and the answers given. | Vision (OCR) · Voice · Memory |
-| **Discharge Navigator** | Discharge | Grounded Q&A on the patient's discharge papers, red-flag symptom matching, and scheduled follow-up reminders. | Vision (OCR) · Memory |
-### Strong add — if time allows
-| Feature | Stage | What it does | Primitives |
-| --- | --- | --- | --- |
-| **Shift Handoff Generator** | Shift change | Produces an SBAR-style handoff summary from the day's notes. Reuses the note-generation pipeline, so it's low new build cost. | Memory (reuses Scribe pipeline) |
-| **Bedside Orientation** | Bedside | A gentle spoken reminder of day, location, reason for stay, and what's next — to counter hospital delirium. | Voice (TTS) · Memory |
-### Roadmap — document, don't build live
-| Feature | Stage | Why it's roadmap | Primitives |
-| --- | --- | --- | --- |
-| **Order Extraction** | Rounds | Real and valuable, but reliable structured parsing under noisy round audio is fiddly. Needs the allergy/interaction cross-check to be trustworthy. | Voice (STT) · Memory (allergy check) |
-| **Alarm-Fatigue Triage** | Monitoring | A genuinely important hospital problem, but safety-sensitive to demo half-built. | (roadmap) |
----
+Confide is an on-prem workflow agent for clinical teams. A spoken round, photographed prescription, or typed correction goes through a different tool path and updates one living patient record. The result is a reviewable bundle: structured note, safety alerts, evidence-backed billing codes, SBAR handoff, patient summary, and staged orders.
+
+The network can stay off for the entire run. Speech transcription, OCR, inference, deterministic safety checks, and SQLite persistence all run on the hospital's own machine.
+
+## Work & Productivity thesis
+
+Clinical work produces a paperwork trail that is repetitive, fragmented, and expensive to recreate at every handoff. Confide turns one input at the bedside into the drafts the team would otherwise build in separate tools. It makes the orchestration visible, measures conservative workflow impact, and keeps the clinician at the commit boundary.
+
+The central demo is dynamic routing:
+
+1. A spoken round fans out into note, graph facts, Guardian checks, billing codes, handoff, and patient summary.
+2. A photographed outside prescription takes a medication-reconciliation path and catches ketorolac against warfarin across modalities.
+3. A typed “cancel the EKG” takes a two-tool correction path and supersedes the prior order with an audit edge.
+
+Same **Run** button, three workflows, one patient graph.
+
+## The safety boundary
+
+> **gpt-oss is the language layer. It never makes a clinical decision.**
+
+- gpt-oss extracts stated facts, structures text, proposes coding candidates, and phrases drafts.
+- `core/curated.py` owns drug categories, allergy conflicts, interactions, recheck windows, ICD-10 entries, CPT entries, and code validity.
+- `core/guardian.py` performs deterministic safety checks. The model is told to trust those results verbatim.
+- Facts and safety alerts are observations and may persist during a run.
+- Notes, billing codes, handoffs, patient summaries, reminders, and order actions remain drafts until explicit approval.
+- Unknown billing codes are removed before review. Labels for approved codes come from curated tables, not model output.
+- Public traces contain tool names, semantic arguments, rule/evidence summaries, and status. Private chain-of-thought is not stored or shown.
+
+Confide assists clinical workflow; it does not diagnose, prescribe, or replace a licensed professional.
+
+## Model split
+
+**Build tool:** Codex + GPT-5.6 were used to design, implement, test, review, and document the rebuild.
+
+**Runtime model:** `gpt-oss:20b` runs locally through Ollama. OpenAI describes gpt-oss as text-only, agent-oriented, reasoning-adjustable, and Apache-2.0 licensed. OpenAI also reports strong HealthBench performance and says the 20b model can run with 16 GB of memory; the same release explicitly warns that gpt-oss is not a medical professional and is not intended for diagnosis or treatment. See the official [gpt-oss release](https://openai.com/index/introducing-gpt-oss/) and [model card](https://openai.com/index/gpt-oss-model-card/).
+
+That split is intentional: healthcare privacy is why the runtime is an open-weight model deployed on infrastructure the care organization controls. Images never go to the text-only model; local Tesseract OCR converts them to text first.
+
 ## Architecture
-Doctor Offline is not eight products. It's **three local primitives**, pointed at eight moments in a patient's stay. That reuse is the point — it's one architecture demonstrated many ways, which is exactly the kind of technical depth that separates a real system from a thin API wrapper.
+
+```text
+speech ── faster-whisper ─┐
+image  ── Tesseract OCR ──┼─> gpt-oss tool loop ─> draft artifact bundle ─> human approval
+text   ───────────────────┘          │                         │
+                                    ├─ language tools         ├─ note / codes / SBAR / summary
+                                    ├─ deterministic tools    ├─ Guardian alerts / rule evidence
+                                    └─ SQLite record tools    └─ staged order actions
 ```
-                         ┌──────────────────────────┐
-                         │        Gemma 4            │
-                         │   (local reasoning, LLM)  │
-                         └────────────┬──────────────┘
-                                      │
-        ┌─────────────────────────────┼─────────────────────────────┐
-        │                             │                             │
- ┌──────▼───────┐            ┌────────▼────────┐           ┌────────▼────────┐
- │ LOCAL VOICE  │            │  LOCAL VISION   │           │  LOCAL MEMORY   │
- │ speech-to-   │            │  OCR / document │           │  state that     │
- │ text + text- │            │  reading        │           │  spans time     │
- │ to-speech    │            │                 │           │  (SQLite)       │
- └──────┬───────┘            └────────┬────────┘           └────────┬────────┘
-        │                             │                             │
-   Scribe, Translation,         Consent,                    tasks, allergies,
-   Consent Q&A,                 Discharge                   reminders, Q&A log,
-   Orientation                                              handoff source
-```
-- **Local Voice** — on-device speech-to-text and text-to-speech. Powers Scribe, Translation, Consent Q&A capture, and Orientation.
-- **Local Vision** — on-device OCR / image reading for any document handed to a patient. Powers Consent and Discharge.
-- **Local Memory** — a small local database for anything that persists across the stay. Powers the task queue, allergy list, reminders, the consent Q&A log, and the notes that Handoff summarizes.
-Gemma 4 sits at the center doing the reasoning — structuring notes, translating, explaining, grounding answers in a document, phrasing orientation gently.
----
-## Tech stack
-Everything runs locally. Swap any tool for one your team knows better — the architecture doesn't change.
-| Layer | Tool | Notes |
-| --- | --- | --- |
-| Reasoning / LLM | **Gemma 4 (8B, `gemma4` on Ollama)** via **Ollama** | One command to serve locally, OpenAI-compatible API to build against. Natively multimodal (vision + audio). |
-| Speech-to-text | **faster-whisper** or **whisper.cpp** | Multilingual, runs offline; handles the translation input too. |
-| Text-to-speech | **Piper** | Fast, natural local voices for spoken output. |
-| Document OCR | **Gemma 4 vision** | For consent forms and discharge papers — no separate OCR engine needed. |
-| Memory / state | **SQLite** | Stdlib, file-based, local. |
-| Orchestration + UI | **FastAPI** backend + a local web page | Serves the screen judges see; everything on `localhost`. |
----
-## How each feature works
-Short data flows. Every path starts and ends on the device.
-- **Clinical Scribe** — session audio → speech-to-text → Gemma structures it into `{chief complaint, medications, follow-ups}` → clinician reviews and edits on screen → saved to memory.
-- **Real-Time Translation** — audio in → speech-to-text (language detected) → Gemma translates → Piper speaks the other language. Reverse the direction for two-way.
-- **Consent Explainer** — form photo → OCR → Gemma explains in plain language and surfaces likely questions → patient's spoken questions captured via speech-to-text → each question and the answer given are logged to memory.
-- **Discharge Navigator** — discharge papers photo → OCR → the document text is placed in Gemma's context for grounded Q&A → red-flag symptoms matched against the sheet's listed urgent signs → follow-up reminders written to memory.
-- **Shift Handoff Generator** — the day's notes are pulled from memory → Gemma writes a structured SBAR summary.
-- **Bedside Orientation** — day, admission reason, and next step are pulled from memory → Gemma phrases them gently → Piper speaks them.
-- **Order Extraction** *(roadmap)* — rounds dictation → speech-to-text → Gemma extracts structured orders → cross-checked against the allergy/interaction list in memory → dropped into a local task queue.
-- **Alarm-Fatigue Triage** *(roadmap)* — correlate and prioritize monitor alarms locally to reduce noise. Roadmap only.
-Clinical outputs keep a human in the loop — the note is editable, and grounded Q&A answers come from the actual document rather than the model's memory, so the system assists rather than replaces clinical judgment.
----
-## Project structure
-The layout mirrors the architecture: `core/` holds the three reusable primitives, `features/` holds thin modules that compose them.
-```
-doctor-offline/
-├── app.py              # FastAPI: routes + orchestration
-├── core/
-│   ├── voice.py        # transcribe() / speak()   — whisper + Piper
-│   ├── vision.py       # ocr()                     — Gemma 4 vision
-│   ├── llm.py          # ask_gemma()               — Ollama client
-│   └── memory.py       # SQLite: patients, notes, tasks, reminders, qa_log
-├── features/
-│   ├── scribe.py
-│   ├── translate.py
-│   ├── consent.py
-│   ├── discharge.py
-│   ├── handoff.py
-│   └── orientation.py
-├── web/
-│   └── index.html      # the local UI, with a live NETWORK: OFF indicator
-├── requirements.txt
-└── README.md
-```
----
-## Getting started
-### Prerequisites
+
+`ToolContext` binds `patient_id`, `encounter_id`, source kind, and language on the server. The model receives only semantic tool arguments, such as a drug name. The loop is capped at eight turns, returns tool errors to the model for recovery, and has a repeatable local fallback route if tool calling is unavailable.
+
+Key modules:
+
+- `core/agent.py` — bounded orchestration loop, tool contracts, draft bundle, approval commits, trace, and ROI.
+- `core/llm.py` — the only Ollama boundary; free text, JSON, and tool turns with reasoning effort.
+- `core/graph.py` — living patient facts, cross-encounter context, corrections, and audit edges.
+- `core/guardian.py` — deterministic allergy, interaction, contradiction, and forgotten-order checks.
+- `core/curated.py` — auditable clinical and billing lookup tables.
+- `core/vision.py` — Tesseract subprocess only; gpt-oss receives text, never pixels.
+- `features/agent.py` — run, upload, approval, trace, recent-run, and ROI APIs.
+- `web/src/views/AgentRunView.jsx` — unified capture, visible orchestration, review, and three-trace reveal.
+- `eval/` — repeatable route, cross-modal safety, and coding evaluation.
+
+## Quick start
+
+Prerequisites:
+
 - Python 3.11+
-- [Ollama](https://ollama.com) installed
-- ~10 GB free disk for the models
-### Setup
+- Node 22.12+ (the repository includes `.nvmrc`)
+- [Ollama](https://ollama.com/download)
+- Tesseract (`brew install tesseract` on macOS; `apt install tesseract-ocr` on Debian/Ubuntu)
+- At least 16 GB memory for the documented gpt-oss-20b local footprint
+
 ```bash
-# 1. Clone the repo
-git clone <your-repo-url> doctor-offline && cd doctor-offline
-# 2. Create the environment
-python -m venv .venv && source .venv/bin/activate
+git clone <repository-url> doctor-offline
+cd doctor-offline
+
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-# 3. Pull Gemma 4 locally (use whatever tag Ollama exposes for the event build)
-ollama pull gemma4
-# 4. Run it
-uvicorn app:app --reload
-# open http://localhost:8000
+
+ollama pull gpt-oss:20b
+
+npm --prefix web install
+npm --prefix web run build
+
+uvicorn app:app --host 127.0.0.1 --port 8000
 ```
-`requirements.txt` (starting point):
+
+Open [http://localhost:8000](http://localhost:8000).
+
+Seeded demo accounts:
+
+- Staff: `doctor` / `confide`
+- Patient: `maria` / `confide`
+
+For a clean seeded demo, remove or move `data/confide.db` before starting. SQLite is recreated locally on startup.
+
+### Prove it is offline
+
+1. Pull the model and install dependencies while connected.
+2. Start Ollama and Confide.
+3. Turn off Wi-Fi or disconnect the network cable.
+4. Run the María speech → image → correction sequence.
+
+The UI keeps the `NETWORK OFF` indicator and live local-model console visible. No runtime feature has an external API fallback.
+
+## API
+
+```text
+POST /api/agent/run
+POST /api/agent/upload
+POST /api/agent/approve
+GET  /api/agent/runs/{encounter_id}/trace
+GET  /api/patients/{patient_id}/agent-runs
+GET  /api/patients/{patient_id}/roi
+GET  /api/model/logs
 ```
-fastapi
-uvicorn
-faster-whisper
-piper-tts
-pillow
-ollama
-```
-### Prove it's offline
-The privacy claim is verifiable in one step:
+
+The legacy `/api/gemma/logs` route remains as a compatibility alias.
+
+## Test and evaluation
+
+The tests patch only language/model boundaries and exercise real temporary SQLite databases, graph persistence, Guardian rules, billing validation, approval isolation, and FastAPI contracts.
+
 ```bash
-# turn off Wi-Fi / pull the network cable, then use the app
-# transcription, notes, translation, and Q&A all keep working
+source .venv/bin/activate
+
+python -m pytest tests -q
+python -m eval.run_eval
+python -m compileall -q core features app.py
+npm --prefix web run build
 ```
-Core inference runs entirely on the device — nothing calls out.
----
-## Demo (offline patient journey)
-The demo walks one patient through the stay with the network disabled the whole time.
-1. Show the screen — **network is off**.
-2. **Rounds** — dictate a short note; the structured note appears locally; edit a line.
-3. **Consent** — upload a form; Doctor Offline explains it; ask a question aloud; the Q&A is logged.
-4. **Discharge** — ask "when can I shower?"; a grounded answer comes from the papers; a red-flag symptom is flagged; a reminder is set.
-5. If time: say a line in another language and hear it back (Translation); trigger the bedside voice (Orientation); generate a one-tap SBAR summary (Handoff).
-Closing line: *one patient, local voice, local vision, local memory, and the internet was off the whole time.*
----
-## Privacy & safety
-- **Nothing leaves the device.** Audio and images are processed locally and are not transmitted.
-- **Human in the loop.** Clinical notes are reviewed and edited by staff before they count; Doctor Offline assists documentation, it doesn't replace judgment.
-- **Grounded answers.** Discharge and consent Q&A are answered from the actual document, not the model's recollection, to reduce hallucination.
-- **Verified allergy checks** (roadmap order extraction) are matched against a stored list, not the model's memory.
----
-## Roadmap
-- **Order extraction from rounds** — structured order parsing under noisy audio, with trustworthy allergy/interaction cross-checks.
-- **Alarm-fatigue triage** — local correlation and prioritization of monitor alarms.
-- Broader multilingual coverage and clinician-facing note templates.
----
-## Acknowledgements
-Built for the **Build with Gemma / JustBuild** hackathon (On-Device AI track) — Pattern, Lehi, UT. Powered by Gemma 4, running entirely on-device.
+
+`python -m eval.run_eval` regenerates `eval/results/latest.json` and fails the process if:
+
+- a required route tool is missing;
+- the María prescription no longer creates a critical cross-modal alert;
+- expected codes are missing;
+- an unexpected or unvalidated code reaches the bundle.
+
+## Demo script (under three minutes)
+
+1. Show `NETWORK OFF`, the local-model console, and María's admission graph: chest pain, atrial fibrillation, penicillin allergy, and warfarin.
+2. Speak: “Chest pain better, 2/10. Continue warfarin, recheck troponin in 3 hours, repeat EKG, discharge tomorrow if stable.” Show the six-tool fan-out and the draft bundle. Approve selected artifacts.
+3. Select **Photograph**, then **Use sample image**. Show the four-tool prescription route and the critical anticoagulant × NSAID bleeding-risk alert.
+4. Type “cancel the EKG.” Show the two-tool route and the retained audit history.
+5. Open **ROI & proof** and label every number as an estimate.
+6. Run `python -m eval.run_eval` and show the green cross-modal and coding results.
+7. Explain the split aloud: Codex/GPT-5.6 built the system; open-weight gpt-oss-20b runs it locally because clinical privacy is the product requirement.
+
+## Collaboration with Codex
+
+Codex accelerated the repository-wide rebuild by mapping the existing graph, Guardian, and feature functions into narrow tool adapters; writing tests before each backend behavior; discovering spec/repository mismatches; and keeping an incremental commit history that mirrors the five build phases.
+
+The human handoff overrode a tempting model-centric design in two important places: image understanding was moved out of the model and into Tesseract because gpt-oss is text-only, and all clinical/billing judgments were moved behind deterministic curated lookups. That is the same collaboration model the product enforces: the model proposes; the human and code-owned rules decide.
+
+The repository did not contain a prior `/feedback` session identifier. Generate the submission feedback record from the Codex session used for the final build and include that identifier in the Devpost submission.
+
+## Honest ROI methodology
+
+- Documentation time: 8 minutes estimated per completed agent run.
+- Coding value: $75 nominal estimate per finalized code, explicitly not actual reimbursement.
+- Near-misses: count of critical deterministic Guardian alerts.
+- Throughput: recorded runs in the current demo dataset.
+- Latency: average locally persisted end-to-end run latency.
+
+These are demo estimates, not clinical, operational, or financial outcome claims.
+
+## Submission checklist
+
+- Track: **Work & Productivity**
+- Public repository, or share access with the event testing addresses
+- README with local run instructions and sample credentials
+- Under-three-minute YouTube demo with Codex/GPT-5.6 voiceover
+- `/feedback` session identifier
+- Category selected in Devpost
+
+## License and data
+
+The bundled patient and prescription are synthetic demo data. gpt-oss licensing and usage are governed by OpenAI's published model terms; see the official model card linked above.

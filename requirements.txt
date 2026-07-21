@@ -6,3 +6,4 @@ piper-tts
 pillow
 ollama
 requests
+PyYAML
